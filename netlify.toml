@@ -6,8 +6,8 @@
 # ============================================================================
 
 [build]
-  publish = "."          # serve everything in the root directory as static files
-  command = "echo 'No build step needed — static HTML/JS/CSS'"
+  publish = "dist"
+  command = "npm run build"
 
 [functions]
   directory     = "netlify/functions"

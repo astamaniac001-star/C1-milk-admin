@@ -21,8 +21,8 @@ const SHELL = [
   '/app.js',
   '/app.css',
   '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
+  '/favicon.svg',
+  '/icons.svg',
 ];
 
 // ── Install: pre-cache shell ──────────────────────────────────────────────────
