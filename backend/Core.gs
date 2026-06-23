@@ -34,6 +34,7 @@
  *  13.  Session validation
  *  14.  ALLOWED_ACTIONS / TESTED_ACTIONS registry
  *  15.  doPost() router
+ *  16.  batchFlush() — write-queue beacon handler
  * ============================================================================
  */
 
@@ -572,6 +573,10 @@ const ALLOWED_ACTIONS = new Set([
   'addMilkBrand', 'getMilkBrands', 'getMilkTypes',
   // Auth
   'verifyPIN', 'rotatePIN',
+
+  // Write-queue beacon — called by navigator.sendBeacon on pagehide
+  'batchFlush',
+
   // System / diagnostics (Part 5)
   'healthCheck', 'runDiagnostics', 'getSheetNamesAction', 'eraseAllData', 'runMigration',
 ]);
@@ -586,7 +591,7 @@ const TESTED_ACTIONS = new Set([
   'addMilkImport', 'updateMilkImport', 'confirmMilkImport', 'deleteMilkImport',
   'getMilkImports', 'getMilkImportSummary', 'getDailyInventory', 'reconcileMilkInventory',
   'addMilkBrand', 'getMilkBrands', 'getMilkTypes',
-  'verifyPIN', 'rotatePIN',
+  'verifyPIN', 'rotatePIN', 'batchFlush',
   'healthCheck', 'runDiagnostics', 'getSheetNamesAction', 'eraseAllData', 'runMigration',
 ]);
 
@@ -675,8 +680,9 @@ function doPost(e) {
       case 'addMilkBrand': return addMilkBrand(payload);
       case 'getMilkBrands': return getMilkBrands(payload);
       case 'getMilkTypes': return getMilkTypes(payload);
-      case 'verifyPIN': return verifyPIN(payload);
-      case 'rotatePIN': return rotatePIN(payload);
+      case 'verifyPIN':  return verifyPIN(payload);
+      case 'rotatePIN':  return rotatePIN(payload);
+      case 'batchFlush': return batchFlush(payload);
       case 'healthCheck': return healthCheck();
       case 'runDiagnostics': return runDiagnostics();
       case 'getSheetNamesAction': return getSheetNamesAction();
@@ -702,6 +708,80 @@ function doGet(e) {
   return ContentService.createTextOutput(
     JSON.stringify({ success: true, data: { status: 'Milk Delivery Admin V17 backend is running', timestamp: nowISTTimestamp() } })
   ).setMimeType(ContentService.MimeType.JSON);
+}
+
+// ----------------------------------------------------------------------------
+// 14. WRITE-QUEUE BEACON — batchFlush processes the navigator.sendBeacon
+//     payload that app.js fires on pagehide (tab close / refresh / navigation).
+//     Each entry in payload.writes is one queued write that didn't complete
+//     in real time. Requires a valid session (doPost's session check covers
+//     auth since app.js sends token + sessionSecret with the beacon).
+//     NOT in PUBLIC_ACTIONS deliberately — only authenticated clients can
+//     flush a queue.
+// ----------------------------------------------------------------------------
+
+/**
+ * batchFlush — processes a batch of pending writes beaconed from the client
+ * on tab close (app.js > pagehide handler). Requires a valid session (app.js
+ * correctly sends token + sessionSecret with the beacon, so the doPost session
+ * check covers auth here). NOT in PUBLIC_ACTIONS deliberately.
+ *
+ * Expects:  payload.writes = [{ action: string, payload: object }, ...]
+ * Returns:  { flushed: N, skipped: N }
+ *
+ * Security: dispatch table below is an explicit allowlist of write-only
+ * actions. Read actions, admin actions, and batchFlush itself are excluded.
+ */
+function batchFlush(payload) {
+  payload = payload || {};
+  var writes = payload.writes;
+  if (!Array.isArray(writes) || writes.length === 0) {
+    return respond(true, { flushed: 0, skipped: 0 });
+  }
+
+  // Explicit allowlist — no eval, no reflection.
+  var DISPATCH = {
+    addCustomer:        addCustomer,
+    updateCustomer:     updateCustomer,
+    deactivateCustomer: deactivateCustomer,
+    addPausePeriod:     addPausePeriod,
+    updateLogEntry:     updateLogEntry,
+    bulkUpsertLogs:     bulkUpsertLogs,
+    generateMonthBill:  generateMonthBill,
+    updateBill:         updateBill,
+    finalizeBill:       finalizeBill,
+    lockBill:           lockBill,
+    unlockBill:         unlockBill,
+    recordPayment:      recordPayment,
+    addAdjustment:      addAdjustment,
+    applyAdjustment:    applyAdjustment,
+    addMilkImport:      addMilkImport,
+    updateMilkImport:   updateMilkImport,
+    confirmMilkImport:  confirmMilkImport,
+    deleteMilkImport:   deleteMilkImport,
+    addMilkBrand:       addMilkBrand,
+  };
+
+  // Cap at 20 writes per beacon — Apps Script has a ~6 s execution limit.
+  var MAX_PER_BEACON = 20;
+  var limit   = Math.min(writes.length, MAX_PER_BEACON);
+  var flushed = 0;
+  var skipped = Math.max(0, writes.length - MAX_PER_BEACON); // excess auto-skipped
+
+  for (var i = 0; i < limit; i++) {
+    var w  = writes[i];
+    var fn = (w && w.action) ? DISPATCH[w.action] : null;
+    if (!fn) { skipped++; continue; }
+    try {
+      fn(w.payload || {});
+      flushed++;
+    } catch (e) {
+      skipped++;
+      Logger.log('[batchFlush] ' + (w.action || '?') + ' failed: ' + e.message);
+    }
+  }
+
+  return respond(true, { flushed: flushed, skipped: skipped });
 }
 
 // NOTE: healthCheck() is intentionally NOT defined in this file.
