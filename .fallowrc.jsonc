@@ -1,0 +1,20 @@
+{
+  // $schema: https://json-schema.org/draft/2020-12 (fallow config)
+  //
+  // Why this file exists:
+  // Two source files are wired in at runtime/deploy time, not via the JS
+  // import graph, so fallow's reachability analysis flags them as "unused
+  // files" / "dead code". They are not dead. Marking them as entry points
+  // (graph roots) tells fallow the truth: the browser/host loads them
+  // directly, even though no module imports them.
+  //
+  //   public/sw.js             — registered at runtime via
+  //                              navigator.serviceWorker.register('/sw.js')
+  //                              in public/app.js
+  //   netlify/functions/proxy.js — a Netlify Function, reached via the
+  //                              netlify.toml redirect /api -> proxy
+  "entry": [
+    "public/sw.js",
+    "netlify/functions/proxy.js"
+  ]
+}
