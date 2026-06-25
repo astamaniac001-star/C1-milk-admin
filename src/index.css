@@ -1,15 +1,5 @@
-/* ── Milk Admin global reset ─────────────────────────────────────────────────
- * Replaces the Vite template CSS that leaked an 18 px base font-size,
- * a purple-tinted :root color, and letter-spacing into the app shell.
- * All visual styling lives in inline styles inside App.jsx; this file only
- * provides the minimal browser-reset layer that public/app.css also needs.
- * ─────────────────────────────────────────────────────────────────────────── */
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+/* C1 Milk Admin — minimal global reset; all UI is inline-styled by React */
+*, *::before, *::after { box-sizing: border-box; }
 
 body {
   margin: 0;
@@ -20,10 +10,4 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Inherit font into form elements (browsers don't do this by default) */
-button,
-input,
-select,
-textarea {
-  font: inherit;
-}
+button, input, select, textarea { font: inherit; }
