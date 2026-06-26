@@ -220,6 +220,27 @@ function Empty({ msg }) {
   return <div style={{ textAlign:"center", padding:"32px 0", color:"#9ca3af", fontSize:13 }}>{msg}</div>;
 }
 
+// Active-brand <option> list shared by the import filter and the addImport modal.
+function ActiveBrandOptions({ brands }) {
+  return brands.filter(b=>b.status==="Active").map(b=><option key={b.id}>{b.name}</option>);
+}
+
+// Active-customer <option> list shared by the adjustment and pause modals.
+function ActiveCustomerOptions({ customers }) {
+  return customers.filter(c=>c.status==="Active").map(c=><option key={c.id} value={c.id}>{c.name}</option>);
+}
+
+// Flex card header with a title (left) and an action node (right), shared by
+// the Adjustments / Pause Periods / Diagnostics cards in renderMore.
+function CardHeader({ title, action }) {
+  return (
+    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+      <span style={{ fontWeight:600, fontSize:13, color:"#111" }}>{title}</span>
+      {action}
+    </div>
+  );
+}
+
 // ── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState("dashboard");
@@ -677,7 +698,7 @@ export default function App() {
           <input type="month" value={impFilter.month} onChange={e=>setImpFilter(p=>({...p,month:e.target.value}))} style={{ ...IS(), flex:1 }} />
           <select value={impFilter.brand} onChange={e=>setImpFilter(p=>({...p,brand:e.target.value}))} style={{ ...IS(), flex:1 }}>
             <option value="">All Brands</option>
-            {brands.filter(b=>b.status==="Active").map(b=><option key={b.id}>{b.name}</option>)}
+            <ActiveBrandOptions brands={brands} />
           </select>
           <select value={impFilter.status} onChange={e=>setImpFilter(p=>({...p,status:e.target.value}))} style={{ ...IS(), flex:1 }}>
             <option value="">All Status</option>
@@ -782,10 +803,7 @@ export default function App() {
       <Section title="More" />
 
       <Card>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-          <span style={{ fontWeight:600, fontSize:13, color:"#111" }}>Adjustments</span>
-          <Btn small onClick={()=>openModal("addAdj")}>+ Add</Btn>
-        </div>
+        <CardHeader title="Adjustments" action={<Btn small onClick={()=>openModal("addAdj")}>+ Add</Btn>} />
         {adjustments.length===0 ? <Empty msg="No adjustments" /> : adjustments.map(a => (
           <div key={a.id} style={{ padding:"8px 0", borderBottom:"0.5px solid #f3f4f6" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
@@ -804,10 +822,7 @@ export default function App() {
       </Card>
 
       <Card>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-          <span style={{ fontWeight:600, fontSize:13, color:"#111" }}>Pause Periods</span>
-          <Btn small onClick={()=>openModal("addPause")}>+ Add</Btn>
-        </div>
+        <CardHeader title="Pause Periods" action={<Btn small onClick={()=>openModal("addPause")}>+ Add</Btn>} />
         {pauses.length===0 ? <Empty msg="No pause periods" /> : pauses.map(p => (
           <div key={p.id} style={{ padding:"8px 0", borderBottom:"0.5px solid #f3f4f6" }}>
             <div style={{ fontSize:13, fontWeight:500, color:"#111" }}>{p.customer}</div>
@@ -842,10 +857,7 @@ export default function App() {
       </Card>
 
       <Card>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-          <span style={{ fontWeight:600, fontSize:13, color:"#111" }}>Diagnostics V17</span>
-          <Btn small onClick={()=>{ setDiagRan(true); toast$("19 checks complete","info"); }}>Run</Btn>
-        </div>
+        <CardHeader title="Diagnostics V17" action={<Btn small onClick={()=>{ setDiagRan(true); toast$("19 checks complete","info"); }}>Run</Btn>} />
         {!diagRan
           ? <div style={{ fontSize:12, color:"#9ca3af", textAlign:"center", padding:"12px 0" }}>Tap Run to check diagnostic items</div>
           : [
@@ -924,7 +936,7 @@ export default function App() {
         <Field label="Brand *">
           <select style={IS()} defaultValue={data.brand||""} onChange={setF("brand")}>
             <option value="">Select Brand</option>
-            {brands.filter(b=>b.status==="Active").map(b=><option key={b.id}>{b.name}</option>)}
+            <ActiveBrandOptions brands={brands} />
           </select>
         </Field>
         <Field label="Milk Type *">
@@ -999,7 +1011,7 @@ export default function App() {
         <Field label="Customer *">
           <select style={IS()} onChange={setF("custId")} defaultValue={data.custId||""}>
             <option value="">Select Customer</option>
-            {customers.filter(c=>c.status==="Active").map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            <ActiveCustomerOptions customers={customers} />
           </select>
         </Field>
         <Field label="Date *"><input type="date" style={IS()} defaultValue={today} onChange={setF("date")} /></Field>
@@ -1017,7 +1029,7 @@ export default function App() {
         <Field label="Customer *">
           <select style={IS()} defaultValue={data.custId||""} onChange={setF("custId")}>
             <option value="">Select Customer</option>
-            {customers.filter(c=>c.status==="Active").map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            <ActiveCustomerOptions customers={customers} />
           </select>
         </Field>
         <Field label="Start Date *"><input type="date" style={IS()} defaultValue={today} onChange={setF("startDate")} /></Field>
