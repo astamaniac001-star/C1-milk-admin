@@ -1,7 +1,7 @@
 // ── useAppHandlers.js ─────────────────────────────────────────────────────────
 // All the imperative save/edit/generate logic lives here. App.jsx owns state
 // and passes it in; this hook returns the bound handlers.
-
+import { callApi, mapCustomerToApi } from "../lib/api.js";
 import { useCallback, useMemo } from "react";
 
 import { fmt, uuid, cleanPhone, monthLabel } from "../lib/utils.js";
@@ -13,24 +13,39 @@ import {
 
 // ── Customer handlers ───────────────────────────────────────────────────────────
 function useCustomerHandlers({ setCustomers, form, toast$, closeModal }) {
-  const saveCustomer = useCallback(() => {
+    const saveCustomer = useCallback(async () => {
     const err = validateCustomerForm(form);
     if (err) { toast$(err, "error"); return; }
 
-    if (form.id) {
-      setCustomers(p => p.map(c => c.id === form.id ? { ...c, ...form } : c));
-      toast$("Customer updated", "success");
-    } else {
-      setCustomers(p => [...p, buildNewCustomer(form)]);
-      toast$("Customer added", "success");
+    const payload = mapCustomerToApi(form);
+
+    try {
+      if (form.id) {
+        await callApi("updateCustomer", payload);
+        setCustomers(p => p.map(c => c.id === form.id ? { ...c, ...form, version: (c.version || 1) + 1 } : c));
+        toast$("Customer updated", "success");
+      } else {
+        const result = await callApi("addCustomer", payload);
+        // The backend returns { customerId: "CUST-..." }
+        const newCustomer = { ...form, id: result.customerId, version: 1 };
+        setCustomers(p => [...p, newCustomer]);
+        toast$("Customer added", "success");
+      }
+      closeModal();
+    } catch (err) {
+      toast$("Failed to save: " + err.message, "error");
     }
-    closeModal();
   }, [form, setCustomers, toast$, closeModal]);
 
-  const deleteCustomer = useCallback(id => {
-    setCustomers(p => p.map(c => c.id === id ? { ...c, status: "Inactive" } : c));
-    toast$("Customer deactivated", "info");
-    closeModal();
+  const deleteCustomer = useCallback(async (id) => {
+    try {
+      await callApi("deactivateCustomer", { customerId: id });
+      setCustomers(p => p.map(c => c.id === id ? { ...c, status: "Inactive" } : c));
+      toast$("Customer deactivated", "info");
+      closeModal();
+    } catch (err) {
+      toast$("Failed to deactivate: " + err.message, "error");
+    }
   }, [setCustomers, toast$, closeModal]);
 
   return { saveCustomer, deleteCustomer };

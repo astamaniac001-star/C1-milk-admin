@@ -1,24 +1,26 @@
-// ── App.jsx ───────────────────────────────────────────────────────────────────
-// Thin orchestrator: state hook + handlers hook + layout shell.
-
+// src/App.jsx
 import { Toast } from "./components/ui.jsx";
 import { AppShell } from "./components/AppShell.jsx";
 import { AppPage } from "./components/AppPage.jsx";
 import { AppModals } from "./components/AppModals.jsx";
+import { Login } from "./components/Login.jsx";
 import { useAppState } from "./hooks/useAppState.js";
 import { useAppHandlers } from "./hooks/useAppHandlers.js";
+import { useAuth } from "./hooks/useAuth.js";
 
 export default function App() {
+  const auth = useAuth();
   const state = useAppState();
 
- const handlers = useAppHandlers(state);
+  // If not logged in, show the PIN screen
+  if (!auth.isAuthenticated) {
+    return <Login onLogin={auth.login} loading={auth.loading} error={auth.error} />;
+  }
+
+  const handlers = useAppHandlers(state);
 
   const footer = (
     <>
-      <AppModals
-        modal={state.modal} form={state.form} setF={state.setF} closeModal={state.closeModal}
-        handlers={handlers} today={state.today} brands={state.brands} customers={state.customers}
-      />
       {state.toast && (
         <Toast msg={state.toast.msg} type={state.toast.type} onClose={() => state.setToast(null)} key={state.toast.id} />
       )}
@@ -26,8 +28,15 @@ export default function App() {
   );
 
   return (
-    <AppShell tab={state.tab} today={state.today} queue={state.queue} onTabChange={state.setTab} footer={footer}>
+    <AppShell 
+      tab={state.tab} 
+      today={state.today} 
+      queue={state.queue} 
+      onTabChange={state.setTab} 
+      footer={footer}
+    >
       <AppPage tab={state.tab} state={state} handlers={handlers} />
+      <AppModals state={state} handlers={handlers} />
     </AppShell>
   );
 }

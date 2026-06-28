@@ -83,7 +83,9 @@ function respond(success, data, error) {
   } else {
     body.error = error || { code: 'UNKNOWN_ERROR', message: 'Unspecified error' };
   }
-  return ContentService.createTextOutput(JSON.stringify(body)).setMimeType(ContentService.MimeType.JSON);
+  return ContentService
+    .createTextOutput(JSON.stringify(body))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // ----------------------------------------------------------------------------
@@ -548,6 +550,58 @@ function purgeExpiredSessions() {
   });
 }
 
+/**
+ * purgeSystemState — comprehensive housekeeping for the SystemState sheet.
+ * Deletes expired sessions and old PIN rate limit keys.
+ * Not wired into the router.
+ * intended to be run via a daily time-driven trigger in the Apps Script editor.
+ */
+function purgeSystemState() {
+  return withLock(function () {
+    const sheet = getSheet('SYSTEM_STATE');
+    const hdr = buildHeaderMap(sheet);
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return respond(true, { purged: 0, remaining: 0 });
+
+    const values = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+    const now = Date.now();
+    const todayStr = todayIST().replace(/-/g, ''); // YYYYMMDD
+    const rowsToDelete = [];
+
+    values.forEach(function (row, i) {
+      const key = String(row[hdr['Key']] || '');
+      
+      // 1. Purge expired sessions
+      if (key.indexOf('Session_') === 0) {
+        const data = safeJsonParse(row[hdr['Value']], null);
+        if (!data || now > data.expiresAt) {
+          rowsToDelete.push(i + 2);
+        }
+      } 
+      // 2. Purge old PINRate keys (anything before today)
+      else if (key.indexOf('PINRate_') === 0) {
+        // Key format: PINRate_YYYYMMDD_<ipHash>
+        const parts = key.split('_');
+        if (parts.length >= 2 && parts[1] < todayStr) {
+          rowsToDelete.push(i + 2);
+        }
+      }
+    });
+
+    // Delete bottom-up so row indices stay valid as we go
+    rowsToDelete.sort(function (a, b) { return b - a; }).forEach(function (rowIndex) {
+      sheet.deleteRow(rowIndex);
+    });
+
+    writeActivityLog('purgeSystemState', {}, { purged: rowsToDelete.length });
+
+    return respond(true, { 
+      purged: rowsToDelete.length,
+      remaining: sheet.getLastRow() - 1 
+    });
+  });
+}
+
 // ----------------------------------------------------------------------------
 // 12. ACTION REGISTRY — Section 8 of CI/CD: check-action-coverage.js parses
 //     these two Sets directly out of this file's source via regex, so the
@@ -610,13 +664,19 @@ const PUBLIC_ACTIONS = new Set(['verifyPIN', 'rotatePIN', 'healthCheck']);
 //     as Part 5 is loaded in the same project, the dispatch works.
 // ----------------------------------------------------------------------------
 
-function doPost(e) {
-  let body;
-  try {
-    body = JSON.parse(e.postData.contents);
-  } catch (err) {
-    return respond(false, null, { code: 'BAD_REQUEST', message: 'Invalid JSON body' });
-  }
+function doPost(e)
+ {
+    // IMPROVEMENT: Check if postData exists before trying to read it
+   if (!e.postData || !e.postData.contents) {
+   return respond(false, null, { code: 'BAD_REQUEST', message: 'Missing POST data' });
+ }
+
+ let body;
+ try {
+   body = JSON.parse(e.postData.contents);
+ } catch (err) {
+   return respond(false, null, { code: 'BAD_REQUEST', message: 'Invalid JSON body' });
+ }
 
   const action = body.action;
   if (!action || !ALLOWED_ACTIONS.has(action)) {
