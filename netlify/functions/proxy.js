@@ -53,7 +53,8 @@ function isRedirectStatus(status) {
 async function postToAppsScript(url, body, timeoutMs, manualRedirect = false) {
   return fetch(url, {
     method:   'POST',
-    headers:  { 'Content-Type': 'application/json' },
+    // Google Apps Script requires 'text/plain' to avoid CORS/Auth redirects
+    headers:  { 'Content-Type': 'text/plain;charset=utf-8' }, 
     body:     JSON.stringify(body),
     signal:   AbortSignal.timeout(timeoutMs),
     redirect: manualRedirect ? 'manual' : 'error',
