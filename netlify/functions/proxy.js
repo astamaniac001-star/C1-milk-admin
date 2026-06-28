@@ -1,35 +1,12 @@
-/**
- * ============================================================================
- * MILK DELIVERY ADMIN — V17
- * netlify/functions/proxy.js
- * ============================================================================
- *
- * This Netlify serverless function is the ONLY thing the browser ever talks
- * to. It:
- *   1. Validates the request origin against ALLOWED_ORIGIN
- *   2. Injects APP_SECRET (never exposed to the browser) into the body
- *   3. Hashes the client IP (never logs raw IPs)
- *   4. Forwards to the Apps Script Web App URL
- *   5. Returns the response to the browser with CORS headers
- *
- * Required environment variables (set in Netlify → Site → Environment vars):
- *   APPS_SCRIPT_URL   — your deployed Apps Script /exec URL
- *   APP_SECRET        — must match APP_SECRET in Apps Script Properties
- *   ALLOWED_ORIGIN    — your frontend URL, e.g. https://your-site.netlify.app
- *
- * Deploy path: netlify/functions/proxy.js
- * ============================================================================
- */
 
 import { createHash } from 'crypto';
 
+// ── SECURE ENVIRONMENT VARIABLES ────────────────────────────────────────────
+// Your secrets are NOT hardcoded here. They are securely stored in your 
+// Netlify Dashboard and injected at runtime. This keeps your GitHub repo safe.
 const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL;
 const APP_SECRET      = process.env.APP_SECRET;
-const ALLOWED_ORIGIN  = process.env.ALLOWED_ORIGIN;
-
-if (!APPS_SCRIPT_URL) console.error('[V17 proxy] APPS_SCRIPT_URL env var missing — all requests will fail');
-if (!APP_SECRET)      console.error('[V17 proxy] APP_SECRET env var missing — all requests will fail');
-if (!ALLOWED_ORIGIN)  console.warn('[V17 proxy] ALLOWED_ORIGIN not set — accepting all origins (not safe for production)');
+const ALLOWED_ORIGIN  = process.env.ALLOWED_ORIGIN || "https://c1milk.netlify.app";
 
 function buildCorsHeaders(requestOrigin) {
   const allow = ALLOWED_ORIGIN
@@ -73,22 +50,33 @@ function isRedirectStatus(status) {
   return status === 301 || status === 302 || status === 307 || status === 308;
 }
 
-async function postToAppsScript(url, body, timeoutMs) {
+async function postToAppsScript(url, body, timeoutMs, manualRedirect = false) {
   return fetch(url, {
     method:   'POST',
     headers:  { 'Content-Type': 'application/json' },
     body:     JSON.stringify(body),
     signal:   AbortSignal.timeout(timeoutMs),
-    redirect: timeoutMs <= 6000 ? 'error' : 'manual',
+    redirect: manualRedirect ? 'manual' : 'error',
   });
 }
 
 async function followRedirect(location, body) {
-  try {
-    return { ok: true, response: await postToAppsScript(location, body, 6000) };
-  } catch (err) {
-    return { ok: false, error: err };
+  let currentUrl = location;
+  for (let i = 0; i < 5; i++) {
+    try {
+      const response = await postToAppsScript(currentUrl, body, 6000, true);
+      if (!isRedirectStatus(response.status)) {
+        return { ok: true, response };
+      }
+      const nextLoc = response.headers.get('location');
+      if (!nextLoc) return { ok: false, error: new Error('Redirect missing Location header') };
+      currentUrl = new URL(nextLoc, currentUrl).toString();
+      await response.text().catch(() => {});
+    } catch (err) {
+      return { ok: false, error: err };
+    }
   }
+  return { ok: false, error: new Error('Too many redirects from upstream') };
 }
 
 async function _handleRedirect(response, body) {
@@ -107,11 +95,11 @@ function _shouldRetry(response, attempt) {
 
 async function attemptUpstreamCall(body, attempt) {
   try {
-    const response = await postToAppsScript(APPS_SCRIPT_URL, body, 8000);
-    console.log('[V17 proxy] Attempt', attempt + 1, 'status:', response.status);
+    const response = await postToAppsScript(APPS_SCRIPT_URL, body, 8000, true);
+    console.log('[proxy] Attempt', attempt + 1, 'status:', response.status);
     return { ok: true, response };
   } catch (err) {
-    console.error('[V17 proxy] Attempt', attempt + 1, 'failed:', err.name, err.message);
+    console.error('[proxy] Attempt', attempt + 1, 'failed:', err.name, err.message);
     return { ok: false, error: err };
   }
 }
@@ -119,7 +107,7 @@ async function attemptUpstreamCall(body, attempt) {
 async function handleResponseWithRedirect(response, body) {
   const redirectResult = await _handleRedirect(response, body);
   if (!redirectResult.ok) {
-    console.error('[V17 proxy] Redirect handling failed:', redirectResult.error?.message);
+    console.error('[proxy] Redirect handling failed:', redirectResult.error?.message);
     return redirectResult;
   }
   return redirectResult;
@@ -127,12 +115,12 @@ async function handleResponseWithRedirect(response, body) {
 
 async function extractResponseText(response) {
   const text = await response.text();
-  console.log('[V17 proxy] Upstream response length:', text.length, 'chars');
+  console.log('[proxy] Upstream response length:', text.length, 'chars');
   return text;
 }
 
 async function callAppsScript(body) {
-  console.log('[V17 proxy] Calling upstream with action:', body.action);
+  console.log('[proxy] Calling upstream with action:', body.action);
   for (let attempt = 0; attempt < 2; attempt++) {
     const callResult = await attemptUpstreamCall(body, attempt);
     if (!callResult.ok) return callResult;
@@ -144,14 +132,14 @@ async function callAppsScript(body) {
 
     if (_shouldRetry(response, attempt)) {
       await response.text().catch(() => {});
-      console.warn('[V17 proxy] Upstream returned', response.status, '— retrying once');
+      console.warn('[proxy] Upstream returned', response.status, '— retrying once');
       continue;
     }
 
     const text = await extractResponseText(response);
     return { ok: true, status: response.status, text };
   }
-  console.error('[V17 proxy] Both attempts failed');
+  console.error('[proxy] Both attempts failed');
   return { ok: false, error: new Error('Upstream returned 5xx on both attempts') };
 }
 
@@ -261,7 +249,7 @@ function classifyUpstreamError(err) {
 function upstreamErrorResponse(result, corsHeaders) {
   const err = result.error;
   const classification = classifyUpstreamError(err);
-  console.error('[V17 proxy] Upstream call failed:', err?.name, err?.message);
+  console.error('[proxy] Upstream call failed:', err?.name, err?.message);
   return errorResponse(classification.status, corsHeaders, classification.code, err?.message || 'Upstream error');
 }
 
@@ -270,7 +258,7 @@ function sanitizeUpstreamBody(text) {
     JSON.parse(text);
     return text;
   } catch {
-    console.error('[V17 proxy] Upstream returned non-JSON body:', text.substring(0, 200));
+    console.error('[proxy] Upstream returned non-JSON body:', text.substring(0, 200));
     return JSON.stringify({
       success: false,
       error: { code: 'UPSTREAM_NON_JSON', message: 'Upstream returned a non-JSON response. Check Netlify logs.' },
@@ -290,7 +278,7 @@ function augmentRequestBody(body, event) {
 
 function buildSuccessResponse(result, corsHeaders) {
   if (result.status !== 200) {
-    console.warn('[V17 proxy] Upstream non-200:', result.status, result.text?.substring(0, 200));
+    console.warn('[proxy] Upstream non-200:', result.status, result.text?.substring(0, 200));
   }
 
   return {
