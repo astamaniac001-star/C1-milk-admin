@@ -1,68 +1,27 @@
 // ── useAppHandlers.js ─────────────────────────────────────────────────────────
 // All the imperative save/edit/generate logic lives here. App.jsx owns state
 // and passes it in; this hook returns the bound handlers.
-//
-// Extracting these out of App keeps App's cognitive complexity low — every
-// handler used to be defined inside App and contributed to its score.
 
 import { useCallback, useMemo } from "react";
 
-import { RATE_BY_PRODUCT } from "../lib/constants.js";
-import { fmt, uuid, cleanPhone, monthLabel, daysInMonth } from "../lib/utils.js";
+import { fmt, uuid, cleanPhone, monthLabel } from "../lib/utils.js";
+import { applyPayment, generateBillsForMonth } from "../lib/billing.js";
+import {
+  validateCustomerForm, buildNewCustomer,
+  validateImportForm, parseImportValues, parseOptionalRate,
+} from "../lib/validation.js";
 
-/**
- * @param {Object}   ctx                     All state + setters + modal helpers.
- * @param {Array}    ctx.customers           customers[]              (read by saveAdjustment/savePause)
- * @param {Array}    ctx.bills               bills[]                  (read by generateBill/whatsapp)
- * @param {Function} ctx.setCustomers
- * @param {Function} ctx.setImports
- * @param {Function} ctx.setBills
- * @param {Function} ctx.setLogs
- * @param {Function} ctx.setAdjustments
- * @param {Function} ctx.setPauses
- * @param {Function} ctx.setBrands
- * @param {Function} ctx.setQueue
- * @param {Object}   ctx.form                form{}                   (live form values)
- * @param {Object}   ctx.modal               modal{}                  (read for bill lookup in recordPayment)
- * @param {string}   ctx.today               today's date (YYYY-MM-DD)
- * @param {string}   ctx.billMonth           selected bill month (YYYY-MM)
- * @param {Function} ctx.toast$              toast(msg, type)
- * @param {Function} ctx.closeModal          closes the open modal
- * @param {Array}    ctx.activeC             already-filtered active customers
- * @returns {Object} All the bound handlers.
- */
-export function useAppHandlers({
-  customers, bills,
-  setCustomers, setImports, setBills, setLogs, setAdjustments, setPauses, setBrands, setQueue,
-  form, modal,
-  today, billMonth,
-  toast$, closeModal, activeC,
-}) {
-
-  // ── customers ──
+// ── Customer handlers ───────────────────────────────────────────────────────────
+function useCustomerHandlers({ setCustomers, form, toast$, closeModal }) {
   const saveCustomer = useCallback(() => {
-    if (!form.name?.trim())    { toast$("Name is required", "error"); return; }
-    if (!form.address?.trim()) { toast$("Address is required", "error"); return; }
-    if (form.phone && !/^\d{10}$/.test(cleanPhone(form.phone))) { toast$("Enter valid 10-digit phone", "error"); return; }
+    const err = validateCustomerForm(form);
+    if (err) { toast$(err, "error"); return; }
 
     if (form.id) {
       setCustomers(p => p.map(c => c.id === form.id ? { ...c, ...form } : c));
       toast$("Customer updated", "success");
     } else {
-      // FIX-5: explicitly default `product`. Without this, if the user never
-      // touches the product <select>, form.product is undefined (defaultValue
-      // only sets the DOM value, not React state), which breaks billing rate
-      // lookup and the customer card display.
-      const nc = {
-        ...form,
-        id: "C" + uuid(),
-        status: "Active",
-        balance: 0,
-        deliveryDays: [1,2,3,4,5,6,0],
-        qty: parseFloat(form.qty) || 1,
-        product: form.product || "Full Cream",
-      };
-      setCustomers(p => [...p, nc]);
+      setCustomers(p => [...p, buildNewCustomer(form)]);
       toast$("Customer added", "success");
     }
     closeModal();
@@ -74,15 +33,20 @@ export function useAppHandlers({
     closeModal();
   }, [setCustomers, toast$, closeModal]);
 
-  // ── imports ──
+  return { saveCustomer, deleteCustomer };
+}
+
+// ── Import handlers ─────────────────────────────────────────────────────────────
+function useImportHandlers({ setImports, form, toast$, closeModal }) {
   const saveImport = useCallback(() => {
-    const qty = parseFloat(form.qty) || 0, rate = parseFloat(form.rate) || 0;
-    if (!form.date || !form.brand || !form.type) { toast$("Fill required fields", "error"); return; }
-    if (qty <= 0 || qty > 9999) { toast$("Invalid quantity", "error"); return; }
-    if (rate <= 0)               { toast$("Invalid rate", "error"); return; }
-    const total = Math.round(qty * rate * 100) / 100;
+    const err = validateImportForm(form);
+    if (err) { toast$(err, "error"); return; }
+    const { qty, rate, total } = parseImportValues(form);
+
     if (form.id) {
-      setImports(p => p.map(i => i.id === form.id ? { ...i, ...form, qty, rate, total, version: (i.version || 1) + 1 } : i));
+      setImports(p => p.map(i => i.id === form.id
+        ? { ...i, ...form, qty, rate, total, version: (i.version || 1) + 1 }
+        : i));
       toast$("Import updated", "success");
     } else {
       setImports(p => [...p, { ...form, id: "IMP" + uuid(), qty, rate, total, status: "Draft", version: 1 }]);
@@ -101,34 +65,53 @@ export function useAppHandlers({
     toast$("Import deleted", "info");
   }, [setImports, toast$]);
 
-  // ── bills ──
+  return { saveImport, confirmImport, deleteImport };
+}
+
+// ── Bill handlers ───────────────────────────────────────────────────────────────
+function useBillHandlers({ setBills, form, modal, toast$, closeModal, activeC, bills, billMonth }) {
   const recordPayment = useCallback(() => {
     const amt = parseFloat(form.payAmt) || 0;
     if (amt <= 0) { toast$("Enter valid amount", "error"); return; }
     const billId = modal?.data?.id;
-    setBills(p => p.map(b => {
-      if (b.id !== billId) return b;
-      const np = Math.min(b.paid + amt, b.amount);
-      return { ...b, paid: np, status: np >= b.amount ? "Paid" : "Partial" };
-    }));
+    setBills(p => p.map(b => b.id === billId ? applyPayment(b, amt) : b));
     toast$(`${fmt(amt)} via ${form.payMode || "Cash"} recorded`, "success");
     closeModal();
   }, [form, modal, setBills, toast$, closeModal]);
 
-  const lockBill   = useCallback(id => { setBills(p => p.map(b => b.id === id ? { ...b, locked: true  } : b)); toast$("Bill locked",   "info"); }, [setBills, toast$]);
-  const unlockBill = useCallback(id => { setBills(p => p.map(b => b.id === id ? { ...b, locked: false } : b)); toast$("Bill unlocked", "info"); }, [setBills, toast$]);
+  const lockBill = useCallback(id => {
+    setBills(p => p.map(b => b.id === id ? { ...b, locked: true } : b));
+    toast$("Bill locked", "info");
+  }, [setBills, toast$]);
 
-  // ── delivery ──
-  const toggleLog = useCallback(lid => {
-    setLogs(p => p.map(l => l.id === lid ? { ...l, delivered: !l.delivered } : l));
-  }, [setLogs]);
+  const unlockBill = useCallback(id => {
+    setBills(p => p.map(b => b.id === id ? { ...b, locked: false } : b));
+    toast$("Bill unlocked", "info");
+  }, [setBills, toast$]);
 
-  // ── adjustments ──
+  const generateBill = useCallback(() => {
+    const result = generateBillsForMonth(activeC, bills, billMonth);
+    if (!result) {
+      toast$(`All bills already generated for ${monthLabel(billMonth)}`, "info");
+      return;
+    }
+    setBills(p => [...p, ...result.newBills]);
+    toast$(`${result.newBills.length} bill(s) generated for ${result.label}`, "success");
+  }, [billMonth, activeC, bills, setBills, toast$]);
+
+  return { recordPayment, lockBill, unlockBill, generateBill };
+}
+
+// ── Adjustment & Pause handlers ──────────────────────────────────────────────────
+function useAdjustmentHandlers({ setAdjustments, setCustomers, setPauses, form, customers, today, toast$, closeModal }) {
   const saveAdjustment = useCallback(() => {
     const amt = parseFloat(form.amount) || 0;
     if (!form.custId || !amt || !form.reason) { toast$("Fill all fields", "error"); return; }
     const cust = customers.find(c => c.id === form.custId);
-    setAdjustments(p => [...p, { id: "ADJ" + uuid(), custId: form.custId, customer: cust?.name || "", date: form.date || today, amount: amt, reason: form.reason, applied: false }]);
+    setAdjustments(p => [...p, {
+      id: "ADJ" + uuid(), custId: form.custId, customer: cust?.name || "",
+      date: form.date || today, amount: amt, reason: form.reason, applied: false,
+    }]);
     toast$("Adjustment added", "success");
     closeModal();
   }, [form, customers, today, setAdjustments, toast$, closeModal]);
@@ -138,17 +121,23 @@ export function useAppHandlers({
     toast$("Adjustment applied to bill", "success");
   }, [setAdjustments, toast$]);
 
-  // ── pauses ──
   const savePause = useCallback(() => {
     if (!form.custId || !form.startDate || !form.endDate) { toast$("Fill all fields", "error"); return; }
     const cust = customers.find(c => c.id === form.custId);
-    setPauses(p => [...p, { id: "P" + uuid(), custId: form.custId, customer: cust?.name || "", startDate: form.startDate, endDate: form.endDate, reason: form.reason || "" }]);
+    setPauses(p => [...p, {
+      id: "P" + uuid(), custId: form.custId, customer: cust?.name || "",
+      startDate: form.startDate, endDate: form.endDate, reason: form.reason || "",
+    }]);
     setCustomers(p => p.map(c => c.id === form.custId ? { ...c, status: "Paused" } : c));
     toast$("Pause period saved", "success");
     closeModal();
   }, [form, customers, setPauses, setCustomers, toast$, closeModal]);
 
-  // ── brands ──
+  return { saveAdjustment, applyAdj, savePause };
+}
+
+// ── Brand handlers ─────────────────────────────────────────────────────────────
+function useBrandHandlers({ setBrands, form, toast$, closeModal }) {
   const saveBrand = useCallback(() => {
     if (!form.name?.trim()) { toast$("Brand name required", "error"); return; }
     setBrands(p => [...p, {
@@ -157,14 +146,18 @@ export function useAppHandlers({
       supplier: form.supplier || "",
       phone: form.phone || "",
       defaultMilkType: form.defaultType || "",
-      rate: form.rate !== undefined && form.rate !== "" ? parseFloat(form.rate) : null,
+      rate: parseOptionalRate(form.rate),
       status: "Active",
     }]);
     toast$("Brand added", "success");
     closeModal();
   }, [form, setBrands, toast$, closeModal]);
 
-  // ── write queue ──
+  return { saveBrand };
+}
+
+// ── Queue handlers ───────────────────────────────────────────────────────────────
+function useQueueHandlers({ setQueue, toast$ }) {
   const retryQueue = useCallback(key => {
     setQueue(p => p.map(q => q.key === key ? { ...q, status: "pending", retries: 0 } : q));
     setTimeout(() => {
@@ -179,37 +172,15 @@ export function useAppHandlers({
     toast$("Write dismissed", "info");
   }, [setQueue, toast$]);
 
-  // ── billing generation ──
-  const generateBill = useCallback(() => {
-    const label = monthLabel(billMonth);
-    const totalDaysInMonth = daysInMonth(billMonth);
-    const existing = new Set(bills.map(b => b.custId + "-" + b.month));
+  return { retryQueue, dismissQueue };
+}
 
-    const newBills = activeC.filter(c => !existing.has(c.id + "-" + label)).map(c => {
-      let scheduledDays = 0;
-      for (let d = 1; d <= totalDaysInMonth; d++) {
-        const dateStr = billMonth + "-" + String(d).padStart(2, "0");
-        const dow = new Date(dateStr).getDay();
-        if (c.deliveryDays?.includes(dow)) scheduledDays++;
-      }
-      const rate = RATE_BY_PRODUCT[c.product] || 32;
-      const amount = Math.round(c.qty * rate * scheduledDays);
-      const [y, m] = billMonth.split("-").map(Number);
-      const dueY = m === 12 ? y + 1 : y, dueM = m === 12 ? 1 : m + 1;
-      return {
-        id: "BL" + uuid(), custId: c.id, customer: c.name,
-        month: label, amount, paid: 0, status: "Unpaid",
-        due: `${dueY}-${String(dueM).padStart(2, "0")}-05`, locked: false,
-      };
-    });
+// ── Other handlers ─────────────────────────────────────────────────────────────
+function useOtherHandlers({ setLogs, bills, toast$ }) {
+  const toggleLog = useCallback(lid => {
+    setLogs(p => p.map(l => l.id === lid ? { ...l, delivered: !l.delivered } : l));
+  }, [setLogs]);
 
-    if (newBills.length === 0) { toast$("All bills already generated for " + label, "info"); return; }
-    setBills(p => [...p, ...newBills]);
-    toast$(`${newBills.length} bill(s) generated for ${label}`, "success");
-  }, [billMonth, activeC, bills, setBills, toast$]);
-
-  // FIX-6: "noreferrer" alongside "noopener". Without noreferrer some browsers
-  // still expose window.opener to the target page, enabling tab-napping.
   const whatsapp = useCallback((phone, billId) => {
     const b = bills.find(x => x.id === billId);
     if (!b) return;
@@ -224,25 +195,35 @@ export function useAppHandlers({
     toast$("WhatsApp opened", "success");
   }, [bills, toast$]);
 
+  return { toggleLog, whatsapp };
+}
+
+// ── Main hook composition ───────────────────────────────────────────────────────
+export function useAppHandlers({
+  customers, bills,
+  setCustomers, setImports, setBills, setLogs, setAdjustments, setPauses, setBrands, setQueue,
+  form, modal,
+  today, billMonth,
+  toast$, closeModal, activeC,
+}) {
+  const customerHandlers = useCustomerHandlers({ setCustomers, form, toast$, closeModal });
+  const importHandlers = useImportHandlers({ setImports, form, toast$, closeModal });
+  const billHandlers = useBillHandlers({ setBills, form, modal, toast$, closeModal, activeC, bills, billMonth });
+  const adjustmentHandlers = useAdjustmentHandlers({ setAdjustments, setCustomers, form, customers, today, toast$, closeModal, setPauses });
+  const brandHandlers = useBrandHandlers({ setBrands, form, toast$, closeModal });
+  const queueHandlers = useQueueHandlers({ setQueue, toast$ });
+  const otherHandlers = useOtherHandlers({ setLogs, bills, toast$ });
+
   return useMemo(() => ({
-    saveCustomer, deleteCustomer,
-    saveImport, confirmImport, deleteImport,
-    recordPayment, lockBill, unlockBill,
-    toggleLog,
-    saveAdjustment, applyAdj,
-    savePause,
-    saveBrand,
-    retryQueue, dismissQueue,
-    generateBill, whatsapp,
+    ...customerHandlers,
+    ...importHandlers,
+    ...billHandlers,
+    ...adjustmentHandlers,
+    ...brandHandlers,
+    ...queueHandlers,
+    ...otherHandlers,
   }), [
-    saveCustomer, deleteCustomer,
-    saveImport, confirmImport, deleteImport,
-    recordPayment, lockBill, unlockBill,
-    toggleLog,
-    saveAdjustment, applyAdj,
-    savePause,
-    saveBrand,
-    retryQueue, dismissQueue,
-    generateBill, whatsapp,
+    customerHandlers, importHandlers, billHandlers,
+    adjustmentHandlers, brandHandlers, queueHandlers, otherHandlers
   ]);
 }

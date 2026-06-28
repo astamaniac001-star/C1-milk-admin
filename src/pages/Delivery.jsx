@@ -4,11 +4,35 @@
 
 import { Card, Field, IS, Section, StatGrid, Empty, Badge } from "../components/ui.jsx";
 
-export default function Delivery({ logDate, onLogDateChange, todayLogs, onToggleLog }) {
-  const scheduled = todayLogs.length;
+function calculateDeliveryStats(todayLogs) {
   const delivered = todayLogs.filter(l => l.delivered);
-  const skipped   = todayLogs.filter(l => !l.delivered).length;
-  const totalL    = delivered.reduce((s, l) => s + l.qty, 0).toFixed(1) + " L";
+  return {
+    scheduled: todayLogs.length,
+    deliveredCount: delivered.length,
+    skippedCount: todayLogs.filter(l => !l.delivered).length,
+    totalLiters: delivered.reduce((s, l) => s + l.qty, 0).toFixed(1) + " L",
+  };
+}
+
+function getToggleButtonStyle(delivered) {
+  return {
+    background: delivered ? "#dcfce7" : "#fee2e2",
+    border: "none",
+    borderRadius: 8,
+    padding: "4px 10px",
+    fontSize: 12,
+    fontWeight: 500,
+    cursor: "pointer",
+    color: delivered ? "#166534" : "#991b1b",
+  };
+}
+
+function getToggleButtonText(delivered) {
+  return delivered ? "✓ Done" : "✗ Skip";
+}
+
+export default function Delivery({ logDate, onLogDateChange, todayLogs, onToggleLog }) {
+  const stats = calculateDeliveryStats(todayLogs);
 
   return (
     <div>
@@ -17,10 +41,10 @@ export default function Delivery({ logDate, onLogDateChange, todayLogs, onToggle
         <input type="date" value={logDate} onChange={e => onLogDateChange(e.target.value)} style={IS()} />
       </Field>
       <StatGrid items={[
-        { label:"Scheduled", value:scheduled,   icon:"📋" },
-        { label:"Delivered", value:delivered.length, icon:"✅", bg:"#dcfce7", tx:"#166534" },
-        { label:"Skipped",   value:skipped,     icon:"⏭️", bg:"#fee2e2", tx:"#991b1b" },
-        { label:"Qty (L)",   value:totalL,      icon:"🥛" },
+        { label:"Scheduled", value:stats.scheduled,   icon:"📋" },
+        { label:"Delivered", value:stats.deliveredCount, icon:"✅", bg:"#dcfce7", tx:"#166534" },
+        { label:"Skipped",   value:stats.skippedCount,     icon:"⏭️", bg:"#fee2e2", tx:"#991b1b" },
+        { label:"Qty (L)",   value:stats.totalLiters,      icon:"🥛" },
       ]} />
       {todayLogs.length === 0 ? <Empty msg="No deliveries scheduled for this date" /> : todayLogs.map(l => (
         <Card key={l.id}>
@@ -33,13 +57,9 @@ export default function Delivery({ logDate, onLogDateChange, todayLogs, onToggle
               <Badge label={l.delivered ? "Delivered" : "Skipped"} />
               <button
                 onClick={() => onToggleLog(l.id)}
-                style={{
-                  background: l.delivered ? "#dcfce7" : "#fee2e2",
-                  border: "none", borderRadius:8, padding:"4px 10px", fontSize:12, fontWeight:500,
-                  cursor:"pointer", color: l.delivered ? "#166534" : "#991b1b",
-                }}
+                style={getToggleButtonStyle(l.delivered)}
               >
-                {l.delivered ? "✓ Done" : "✗ Skip"}
+                {getToggleButtonText(l.delivered)}
               </button>
             </div>
           </div>

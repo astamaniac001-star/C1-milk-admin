@@ -47,31 +47,55 @@ export function Modal({ title, onClose, children, wide }) {
   );
 }
 
+const BUTTON_VARIANTS = {
+  primary:   { background:BLUE, color:"#fff", border:"none" },
+  secondary: { background:"#f3f4f6", color:"#374151", border:"1px solid #d1d5db" },
+  danger:    { background:"#fee2e2", color:"#991b1b", border:"1px solid #fca5a5" },
+  success:   { background:"#dcfce7", color:"#166534", border:"1px solid #86efac" },
+  ghost:     { background:"none", color:BLUE, border:"none" },
+};
+
+function getSizeStyles(small) {
+  return {
+    padding: small ? "4px 10px" : "8px 14px",
+    fontSize: small ? 11 : 13,
+  };
+}
+
+function getCursorStyle(disabled) {
+  return { cursor: disabled ? "not-allowed" : "pointer" };
+}
+
+function getDisabledStyle(disabled) {
+  return disabled ? { opacity: 0.55, filter: "grayscale(20%)" } : {};
+}
+
+function getWidthStyle(full) {
+  return { width: full ? "100%" : undefined };
+}
+
+function getButtonStyle(variant, small, full, disabled, extraStyle) {
+  const base = BUTTON_VARIANTS[variant] || BUTTON_VARIANTS.primary;
+  return {
+    ...base,
+    ...getDisabledStyle(disabled),
+    ...getSizeStyles(small),
+    borderRadius: 8,
+    fontWeight: 500,
+    ...getCursorStyle(disabled),
+    whiteSpace: "nowrap",
+    ...getWidthStyle(full),
+    ...extraStyle,
+  };
+}
+
 // Themed button. `variant` selects the palette; small/full tweak size & width.
 export function Btn({ onClick, children, variant="primary", small, full, disabled, style }) {
-  const base = {
-    primary:   { background:BLUE, color:"#fff", border:"none" },
-    secondary: { background:"#f3f4f6", color:"#374151", border:"1px solid #d1d5db" },
-    danger:    { background:"#fee2e2", color:"#991b1b", border:"1px solid #fca5a5" },
-    success:   { background:"#dcfce7", color:"#166534", border:"1px solid #86efac" },
-    ghost:     { background:"none", color:BLUE, border:"none" },
-  }[variant];
-  const disabledStyle = disabled ? { opacity:0.55, filter:"grayscale(20%)" } : {};
   return (
     <button
       disabled={disabled}
       onClick={onClick}
-      style={{
-        ...base, ...disabledStyle,
-        padding: small ? "4px 10px" : "8px 14px",
-        borderRadius: 8,
-        fontSize: small ? 11 : 13,
-        fontWeight: 500,
-        cursor: disabled ? "not-allowed" : "pointer",
-        whiteSpace: "nowrap",
-        width: full ? "100%" : undefined,
-        ...style,
-      }}
+      style={getButtonStyle(variant, small, full, disabled, style)}
     >
       {children}
     </button>

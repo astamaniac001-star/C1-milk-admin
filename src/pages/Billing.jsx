@@ -7,6 +7,60 @@ import { Card, Btn, Field, IS, Section, StatGrid, Empty, Badge } from "../compon
 
 const STATUS_FILTERS = ["All","Unpaid","Partial","Paid"];
 
+function renderPaymentButton(bill, onOpenModal) {
+  if (!bill.locked && bill.status !== "Paid") {
+    return <Btn small onClick={() => onOpenModal("payment", bill)}>Record Payment</Btn>;
+  }
+  return null;
+}
+
+function renderLockButton(bill, onLock, onUnlock) {
+  if (!bill.locked && bill.status === "Paid") {
+    return <Btn small variant="secondary" onClick={() => onLock(bill.id)}>🔒 Lock</Btn>;
+  }
+  if (bill.locked) {
+    return <Btn small variant="secondary" onClick={() => onUnlock(bill.id)}>🔓 Unlock</Btn>;
+  }
+  return null;
+}
+
+function BillActions({ bill, customer, onOpenModal, onLock, onUnlock, onWhatsapp }) {
+  return (
+    <div style={{ display:"flex", gap:6, marginTop:10, flexWrap:"wrap" }}>
+      {renderPaymentButton(bill, onOpenModal)}
+      {renderLockButton(bill, onLock, onUnlock)}
+      <Btn
+        small variant="secondary"
+        onClick={() => {
+          if (customer) onWhatsapp(customer.phone, bill.id);
+        }}
+      >WhatsApp</Btn>
+      <Btn small variant="secondary" onClick={() => onOpenModal("billDetail", bill)}>View</Btn>
+    </div>
+  );
+}
+
+function BillCard({ bill, customers, onOpenModal, onLock, onUnlock, onWhatsapp }) {
+  const customer = customers.find(x => x.id === bill.custId);
+  return (
+    <Card key={bill.id}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+        <div>
+          <div style={{ fontWeight:600, fontSize:14, color:"#111" }}>{bill.customer}</div>
+          <div style={{ fontSize:12, color:"#6b7280" }}>{bill.month} · Due {bill.due}</div>
+          <div style={{ fontSize:13, color:"#374151", marginTop:4 }}>
+            {fmt(bill.paid)} / {fmt(bill.amount)}
+          </div>
+          {bill.status !== "Paid" && <div style={{ fontSize:12, color:"#991b1b" }}>Pending: {fmt(bill.amount - bill.paid)}</div>}
+          {bill.locked && <div style={{ fontSize:11, color:"#6b7280", marginTop:2 }}>🔒 Locked</div>}
+        </div>
+        <Badge label={bill.status} />
+      </div>
+      <BillActions bill={bill} customer={customer} onOpenModal={onOpenModal} onLock={onLock} onUnlock={onUnlock} onWhatsapp={onWhatsapp} />
+    </Card>
+  );
+}
+
 export default function Billing({
   bills, filtered, billFilter, billMonth, pendingDues, customers,
   onBillFilterChange, onBillMonthChange,
@@ -43,33 +97,15 @@ export default function Billing({
         { label:"Bills",        value:bills.length,                              icon:"📄" },
       ]} />
       {filtered.length === 0 ? <Empty msg="No bills match filter" /> : filtered.map(b => (
-        <Card key={b.id}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-            <div>
-              <div style={{ fontWeight:600, fontSize:14, color:"#111" }}>{b.customer}</div>
-              <div style={{ fontSize:12, color:"#6b7280" }}>{b.month} · Due {b.due}</div>
-              <div style={{ fontSize:13, color:"#374151", marginTop:4 }}>
-                {fmt(b.paid)} / {fmt(b.amount)}
-              </div>
-              {b.status !== "Paid" && <div style={{ fontSize:12, color:"#991b1b" }}>Pending: {fmt(b.amount - b.paid)}</div>}
-              {b.locked && <div style={{ fontSize:11, color:"#6b7280", marginTop:2 }}>🔒 Locked</div>}
-            </div>
-            <Badge label={b.status} />
-          </div>
-          <div style={{ display:"flex", gap:6, marginTop:10, flexWrap:"wrap" }}>
-            {!b.locked && b.status !== "Paid" && <Btn small onClick={() => onOpenModal("payment", b)}>Record Payment</Btn>}
-            {!b.locked && b.status === "Paid" && <Btn small variant="secondary" onClick={() => onLock(b.id)}>🔒 Lock</Btn>}
-            {b.locked && <Btn small variant="secondary" onClick={() => onUnlock(b.id)}>🔓 Unlock</Btn>}
-            <Btn
-              small variant="secondary"
-              onClick={() => {
-                const c = customers.find(x => x.id === b.custId);
-                if (c) onWhatsapp(c.phone, b.id);
-              }}
-            >WhatsApp</Btn>
-            <Btn small variant="secondary" onClick={() => onOpenModal("billDetail", b)}>View</Btn>
-          </div>
-        </Card>
+        <BillCard 
+          key={b.id}
+          bill={b}
+          customers={customers}
+          onOpenModal={onOpenModal}
+          onLock={onLock}
+          onUnlock={onUnlock}
+          onWhatsapp={onWhatsapp}
+        />
       ))}
     </div>
   );

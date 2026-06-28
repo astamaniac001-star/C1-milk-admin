@@ -16,5 +16,8 @@
   "entry": [
     "public/sw.js",
     "netlify/functions/proxy.js"
-  ]
+  ],
+  "duplicates": {
+    "ignore": ["dup:c53e2f4f"]
+  }
 }

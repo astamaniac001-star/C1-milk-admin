@@ -5,6 +5,17 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.js'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json'],
+      reportsDirectory: './coverage',
+      include: ['src/lib/**/*.js'],
+      exclude: ['src/lib/**/*.test.js'],
+    },
+  },
   build: {
     target: 'es2020',
     rollupOptions: {

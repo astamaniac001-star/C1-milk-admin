@@ -1,5 +1,3 @@
-
-
 /**
  * ============================================================================
  * MILK DELIVERY ADMIN — V17
@@ -29,14 +27,10 @@ const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL;
 const APP_SECRET      = process.env.APP_SECRET;
 const ALLOWED_ORIGIN  = process.env.ALLOWED_ORIGIN;
 
-// Warn loudly at cold-start if misconfigured — these will appear in Netlify
-// function logs (Functions → proxy → Recent invocations).
 if (!APPS_SCRIPT_URL) console.error('[V17 proxy] APPS_SCRIPT_URL env var missing — all requests will fail');
 if (!APP_SECRET)      console.error('[V17 proxy] APP_SECRET env var missing — all requests will fail');
 if (!ALLOWED_ORIGIN)  console.warn('[V17 proxy] ALLOWED_ORIGIN not set — accepting all origins (not safe for production)');
 
-// ── CORS headers ─────────────────────────────────────────────────────────────
-// These are set by the proxy, never by Apps Script (Rule 1 from Part 4).
 function buildCorsHeaders(requestOrigin) {
   const allow = ALLOWED_ORIGIN
     ? ALLOWED_ORIGIN.replace(/\/$/, '')
@@ -51,7 +45,18 @@ function buildCorsHeaders(requestOrigin) {
   };
 }
 
-// ── IP helpers ────────────────────────────────────────────────────────────────
+function jsonResponse(statusCode, corsHeaders, payload) {
+  return {
+    statusCode,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  };
+}
+
+function errorResponse(statusCode, corsHeaders, code, message) {
+  return jsonResponse(statusCode, corsHeaders, { success: false, error: { code, message } });
+}
+
 function getClientIP(event) {
   return (
     event.headers['x-nf-client-connection-ip'] ||
@@ -60,178 +65,234 @@ function getClientIP(event) {
   );
 }
 
-// Issue 2 fix: SHA-256 of the IP — 16 hex chars (64 bits) is non-reversible
-// in practice. We never store or log raw IPs; only this token goes to Apps
-// Script. No salt needed here: the security goal is rate-limiting, not user
-// anonymity. If you later want full anonymity, add a random SALT env var.
 function hashIP(ip) {
   return createHash('sha256').update(ip).digest('hex').slice(0, 16);
 }
 
-// ── Apps Script call ──────────────────────────────────────────────────────────
-// Issues 1 + 3 + 4 + 6 fixed together:
-//   - 8 s timeout fits inside Netlify's 10 s wall clock (Issue 1)
-//   - no retry on network/timeout errors (Issue 1)
-//   - redirect: 'manual' + explicit POST on the Location header (Issue 4)
-//   - body drained before 5xx retry (Issue 3)
-//   - inline AbortSignal.timeout — Node 18+ always has it (Issue 6)
+function isRedirectStatus(status) {
+  return status === 301 || status === 302 || status === 307 || status === 308;
+}
+
+async function postToAppsScript(url, body, timeoutMs) {
+  return fetch(url, {
+    method:   'POST',
+    headers:  { 'Content-Type': 'application/json' },
+    body:     JSON.stringify(body),
+    signal:   AbortSignal.timeout(timeoutMs),
+    redirect: timeoutMs <= 6000 ? 'error' : 'manual',
+  });
+}
+
+async function followRedirect(location, body) {
+  try {
+    return { ok: true, response: await postToAppsScript(location, body, 6000) };
+  } catch (err) {
+    return { ok: false, error: err };
+  }
+}
+
+async function _handleRedirect(response, body) {
+  const loc = response.headers.get('location');
+  if (isRedirectStatus(response.status) && loc) {
+    const redirect = await followRedirect(loc, body);
+    if (!redirect.ok) return redirect;
+    return { ok: true, response: redirect.response };
+  }
+  return { ok: true, response };
+}
+
+function _shouldRetry(response, attempt) {
+  return response.status >= 500 && attempt === 0;
+}
+
+async function attemptUpstreamCall(body, attempt) {
+  try {
+    const response = await postToAppsScript(APPS_SCRIPT_URL, body, 8000);
+    console.log('[V17 proxy] Attempt', attempt + 1, 'status:', response.status);
+    return { ok: true, response };
+  } catch (err) {
+    console.error('[V17 proxy] Attempt', attempt + 1, 'failed:', err.name, err.message);
+    return { ok: false, error: err };
+  }
+}
+
+async function handleResponseWithRedirect(response, body) {
+  const redirectResult = await _handleRedirect(response, body);
+  if (!redirectResult.ok) {
+    console.error('[V17 proxy] Redirect handling failed:', redirectResult.error?.message);
+    return redirectResult;
+  }
+  return redirectResult;
+}
+
+async function extractResponseText(response) {
+  const text = await response.text();
+  console.log('[V17 proxy] Upstream response length:', text.length, 'chars');
+  return text;
+}
+
 async function callAppsScript(body) {
+  console.log('[V17 proxy] Calling upstream with action:', body.action);
   for (let attempt = 0; attempt < 2; attempt++) {
-    let response;
-    try {
-      response = await fetch(APPS_SCRIPT_URL, {
-        method:   'POST',
-        headers:  { 'Content-Type': 'application/json' },
-        body:     JSON.stringify(body),
-        signal:   AbortSignal.timeout(8000),  // 8 s: leaves headroom for Netlify's 10 s default
-        redirect: 'manual',                   // never let fetch change our method silently
-      });
-    } catch (err) {
-      // Network / timeout errors never retry — Netlify may have killed us already
-      return { ok: false, error: err };
-    }
+    const callResult = await attemptUpstreamCall(body, attempt);
+    if (!callResult.ok) return callResult;
 
-    // Issue 4 fix: manually follow redirect with POST preserved.
-    // GAS normally uses 307 (which preserves method) but guard 301/302/308 too.
-    const loc = response.headers.get('location');
-    if ((response.status === 301 || response.status === 302 ||
-         response.status === 307 || response.status === 308) && loc) {
-      try {
-        response = await fetch(loc, {
-          method:   'POST',                    // always POST, even for 302 — we know GAS wants POST
-          headers:  { 'Content-Type': 'application/json' },
-          body:     JSON.stringify(body),
-          signal:   AbortSignal.timeout(6000),
-          redirect: 'error',                   // no further redirects
-        });
-      } catch (err) {
-        return { ok: false, error: err };
-      }
-    }
+    const redirectResult = await handleResponseWithRedirect(callResult.response, body);
+    if (!redirectResult.ok) return redirectResult;
 
-    // Issue 3 fix: drain body before retry so the TCP connection is released
-    if (response.status >= 500 && attempt === 0) {
+    const response = redirectResult.response;
+
+    if (_shouldRetry(response, attempt)) {
       await response.text().catch(() => {});
       console.warn('[V17 proxy] Upstream returned', response.status, '— retrying once');
       continue;
     }
 
-    const text = await response.text();
+    const text = await extractResponseText(response);
     return { ok: true, status: response.status, text };
   }
+  console.error('[V17 proxy] Both attempts failed');
   return { ok: false, error: new Error('Upstream returned 5xx on both attempts') };
 }
 
-// ── Main handler ──────────────────────────────────────────────────────────────
-export const handler = async function (event) {
-  const origin = (event.headers['origin'] || event.headers['Origin'] || '').replace(/\/$/, '');
-  const corsHeaders = buildCorsHeaders(origin);
+function parseRequestBody(bodyStr) {
+  try {
+    return { ok: true, body: JSON.parse(bodyStr) };
+  } catch {
+    return { ok: false };
+  }
+}
 
-  // Handle CORS preflight
+function validateOrigin(origin) {
+  if (!ALLOWED_ORIGIN) return true;
+  const norm = ALLOWED_ORIGIN.replace(/\/$/, '');
+  return origin.toLowerCase() === norm.toLowerCase();
+}
+
+function _validateMethod(event, corsHeaders) {
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: corsHeaders, body: '' };
+    return { ok: true, preflight: true };
   }
-
   if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: false, error: { code: 'METHOD_NOT_ALLOWED', message: 'Only POST is accepted' } }),
-    };
+    return { ok: false, response: errorResponse(405, corsHeaders, 'METHOD_NOT_ALLOWED', 'Only POST is accepted') };
   }
+  return { ok: true };
+}
 
-  // Origin check
-  if (ALLOWED_ORIGIN) {
-    const norm = ALLOWED_ORIGIN.replace(/\/$/, '');
-    if (origin.toLowerCase() !== norm.toLowerCase()) {
-      return {
-        statusCode: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ success: false, error: { code: 'FORBIDDEN', message: 'Origin not allowed' } }),
-      };
-    }
+function _validateOrigin(event, corsHeaders) {
+  const origin = (event.headers['origin'] || event.headers['Origin'] || '').replace(/\/$/, '');
+  if (!validateOrigin(origin)) {
+    return { ok: false, response: errorResponse(403, corsHeaders, 'FORBIDDEN', 'Origin not allowed') };
   }
+  return { ok: true };
+}
 
-  // Body size check (100 KB hard limit)
+function _validateBodySize(event, corsHeaders) {
   const bodyStr = event.body || '';
   if (Buffer.byteLength(bodyStr, 'utf8') > 102400) {
-    return {
-      statusCode: 413,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: false, error: { code: 'PAYLOAD_TOO_LARGE', message: 'Request body exceeds 100 KB' } }),
-    };
+    return { ok: false, response: errorResponse(413, corsHeaders, 'PAYLOAD_TOO_LARGE', 'Request body exceeds 100 KB') };
   }
+  return { ok: true, bodyStr };
+}
 
-  // Parse JSON
-  let body;
-  try {
-    body = JSON.parse(bodyStr);
-  } catch {
-    return {
-      statusCode: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: false, error: { code: 'BAD_REQUEST', message: 'Invalid JSON' } }),
-    };
+function _validateBodyStructure(bodyStr, corsHeaders) {
+  const parsed = parseRequestBody(bodyStr);
+  if (!parsed.ok) {
+    return { ok: false, response: errorResponse(400, corsHeaders, 'BAD_REQUEST', 'Invalid JSON') };
   }
-
-  // Validate action field exists (quick cheap check before hitting Apps Script)
-  if (!body.action || typeof body.action !== 'string') {
-    return {
-      statusCode: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: false, error: { code: 'BAD_REQUEST', message: 'action field is required' } }),
-    };
+  if (!parsed.body.action || typeof parsed.body.action !== 'string') {
+    return { ok: false, response: errorResponse(400, corsHeaders, 'BAD_REQUEST', 'action field is required') };
   }
+  return { ok: true, body: parsed.body };
+}
 
-  // Sanity checks on env vars
+function _validateEnvironment(corsHeaders) {
   if (!APPS_SCRIPT_URL || !APP_SECRET) {
-    return {
-      statusCode: 503,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: false, error: { code: 'PROXY_MISCONFIGURED', message: 'Proxy is missing required environment variables' } }),
-    };
+    return { ok: false, response: errorResponse(503, corsHeaders, 'PROXY_MISCONFIGURED', 'Proxy is missing required environment variables') };
   }
+  return { ok: true };
+}
 
-  // Inject server-side values — the browser never sees APP_SECRET
-  body.appSecret = APP_SECRET;
-  body.ipHash    = hashIP(getClientIP(event));
+export function validateRequest(event, corsHeaders) {
+  const methodCheck = _validateMethod(event, corsHeaders);
+  if (!methodCheck.ok) return methodCheck;
+  if (methodCheck.preflight) return methodCheck;
 
-  // Forward to Apps Script
-  const result = await callAppsScript(body);
+  const originCheck = _validateOrigin(event, corsHeaders);
+  if (!originCheck.ok) return originCheck;
 
-  if (!result.ok) {
-    const err = result.error;
-    const isTimeout = err?.name === 'TimeoutError' || err?.name === 'AbortError';
-    const status    = isTimeout ? 504 : 502;
-    const code      = isTimeout ? 'GATEWAY_TIMEOUT' : 'UPSTREAM_ERROR';
-    console.error('[V17 proxy] Upstream call failed:', err?.name, err?.message);
-    return {
-      statusCode: status,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: false, error: { code, message: err?.message || 'Upstream error' } }),
-    };
-  }
+  const sizeCheck = _validateBodySize(event, corsHeaders);
+  if (!sizeCheck.ok) return sizeCheck;
 
-  if (result.status !== 200) {
-    console.warn('[V17 proxy] Upstream non-200:', result.status, result.text?.substring(0, 200));
-  }
+  const structureCheck = _validateBodyStructure(sizeCheck.bodyStr, corsHeaders);
+  if (!structureCheck.ok) return structureCheck;
 
-  // Issue 5 fix: validate the upstream body is actual JSON before returning
-  // it as application/json. GAS may return an HTML error page on cold-start
-  // failures; passing that through makes the client's apiCall() throw a
-  // cryptic SyntaxError instead of surfacing a clean message.
-  let responseBody = result.text;
+  const envCheck = _validateEnvironment(corsHeaders);
+  if (!envCheck.ok) return envCheck;
+
+  return { ok: true, body: structureCheck.body };
+}
+
+function processRequestPipeline(event, corsHeaders) {
+  const request = validateRequest(event, corsHeaders);
+  if (!request.ok) return request.response || { ok: false, response: request.response };
+  if (request.preflight) return { ok: true, preflight: true, response: { statusCode: 204, headers: corsHeaders, body: '' } };
+  return { ok: true, body: request.body };
+}
+
+async function executeUpstreamCall(body) {
+  return callAppsScript(body);
+}
+
+function handleUpstreamResponse(result, corsHeaders) {
+  if (!result.ok) return upstreamErrorResponse(result, corsHeaders);
+  return buildSuccessResponse(result, corsHeaders);
+}
+
+function classifyUpstreamError(err) {
+  const isTimeout = err?.name === 'TimeoutError' || err?.name === 'AbortError';
+  return {
+    isTimeout,
+    status: isTimeout ? 504 : 502,
+    code: isTimeout ? 'GATEWAY_TIMEOUT' : 'UPSTREAM_ERROR',
+  };
+}
+
+function upstreamErrorResponse(result, corsHeaders) {
+  const err = result.error;
+  const classification = classifyUpstreamError(err);
+  console.error('[V17 proxy] Upstream call failed:', err?.name, err?.message);
+  return errorResponse(classification.status, corsHeaders, classification.code, err?.message || 'Upstream error');
+}
+
+function sanitizeUpstreamBody(text) {
   try {
-    JSON.parse(result.text);
+    JSON.parse(text);
+    return text;
   } catch {
-    console.error('[V17 proxy] Upstream returned non-JSON body:', result.text.substring(0, 200));
-    responseBody = JSON.stringify({
+    console.error('[V17 proxy] Upstream returned non-JSON body:', text.substring(0, 200));
+    return JSON.stringify({
       success: false,
       error: { code: 'UPSTREAM_NON_JSON', message: 'Upstream returned a non-JSON response. Check Netlify logs.' },
     });
   }
+}
 
-  // Pass the response straight through — Apps Script owns the JSON shape
+function buildRequestOrigin(event) {
+  return (event.headers['origin'] || event.headers['Origin'] || '').replace(/\/$/, '');
+}
+
+function augmentRequestBody(body, event) {
+  body.appSecret = APP_SECRET;
+  body.ipHash = hashIP(getClientIP(event));
+  return body;
+}
+
+function buildSuccessResponse(result, corsHeaders) {
+  if (result.status !== 200) {
+    console.warn('[V17 proxy] Upstream non-200:', result.status, result.text?.substring(0, 200));
+  }
+
   return {
     statusCode: 200,
     headers: {
@@ -239,6 +300,19 @@ export const handler = async function (event) {
       'Content-Type':  'application/json',
       'Cache-Control': 'no-store',
     },
-    body: responseBody,
+    body: sanitizeUpstreamBody(result.text),
   };
+}
+
+export const handler = async function (event) {
+  const origin = buildRequestOrigin(event);
+  const corsHeaders = buildCorsHeaders(origin);
+
+  const pipeline = processRequestPipeline(event, corsHeaders);
+  if (!pipeline.ok) return pipeline.response;
+  if (pipeline.preflight) return pipeline.response;
+
+  const body = augmentRequestBody(pipeline.body, event);
+  const result = await executeUpstreamCall(body);
+  return handleUpstreamResponse(result, corsHeaders);
 };

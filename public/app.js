@@ -11,6 +11,7 @@
  *   window.queueWrite(action,payload) → wraps writeQueue.add with toast
  *   window.pendingState               → Map of entityKey → pending payload
  *   window.updateUnsavedIndicator()   → refreshes the unsaved-writes badge
+ *   window.resolveEntityKey(action, payload) → pure function for testing
  * ============================================================================ */
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -20,10 +21,6 @@ const MAX_RETRIES     = 5;
 const QUEUE_SIZE_MAX  = 100;
 
 // ── Session helpers ───────────────────────────────────────────────────────────
-// Token + sessionSecret are written here by handleLogin() (see index.html)
-// and read back by apiCall on every request. Using sessionStorage means they
-// are cleared when the tab closes (no persistent auth token on disk).
-
 function getSession() {
   return {
     token:         sessionStorage.getItem('milkapp_token')  || '',
@@ -31,9 +28,6 @@ function getSession() {
   };
 }
 
-// Exposed on window because the pre-React PIN login flow in index.html calls
-// saveSession(...) before this module's bundle would export anything — same
-// cross-file contract as window.apiCall / window.queueWrite below.
 window.saveSession = function saveSession(token, sessionSecret) {
   sessionStorage.setItem('milkapp_token',  token);
   sessionStorage.setItem('milkapp_secret', sessionSecret);
@@ -45,11 +39,6 @@ function clearSession() {
 }
 
 // ── Core API call ─────────────────────────────────────────────────────────────
-/**
- * apiCall — sends a POST to /api (the Netlify proxy). Automatically attaches
- * the current session token + sessionSecret. Returns the parsed JSON body.
- * Never throws — callers check res.success instead.
- */
 window.apiCall = async function apiCall(action, payload = {}) {
   const { token, sessionSecret } = getSession();
   try {
@@ -59,7 +48,6 @@ window.apiCall = async function apiCall(action, payload = {}) {
       body:    JSON.stringify({ action, payload, token, sessionSecret }),
     });
     const json = await res.json();
-    // If the session expired on the server, clear local session and reload
     if (!json.success && json.error?.code === 'UNAUTHORIZED') {
       clearSession();
       window.location.reload();
@@ -71,34 +59,37 @@ window.apiCall = async function apiCall(action, payload = {}) {
 };
 
 // ── resolveEntityKey ──────────────────────────────────────────────────────────
+const ENTITY_KEY_FORMATS = {
+  recordPayment: (p) => `payment:${p.billId}`,
+  addAdjustment: (p) => `adj:${p.customerId}:${p.date || ''}`,
+  addCustomer: (p) => `cust:${String(p.deliveryAddress || '').trim()}`,
+  updateCustomer: (p) => `cust-upd:${p.customerId}`,
+  bulkUpsertLogs: (p) => `logs-bulk:${(p.logs || []).map(l => l.logId || '?').join(',')}`,
+  updateLogEntry: (p) => `log-upd:${p.logId}`,
+  updateBill: (p) => `bill-upd:${p.billId}`,
+  addPausePeriod: (p) => `pause:${p.customerId}:${p.startDate}`,
+  finalizeBill: (p) => `bill-fin:${p.billId}`,
+  lockBill: (p) => `bill-lock:${p.billId}`,
+  generateMonthBill: (p) => `bill-gen:${p.customerId}:${p.month}`,
+  addMilkImport: (p) => `milk-imp:${p.date}:${p.brandName}`,
+  updateMilkImport: (p) => `milk-upd:${p.importId}`,
+  confirmMilkImport: (p) => `milk-conf:${p.importId}`,
+};
+
 function resolveEntityKey(action, payload) {
-  switch (action) {
-    case 'recordPayment':     return 'payment:'    + payload.billId;
-    case 'addAdjustment':     return 'adj:'        + payload.customerId + ':' + (payload.date || '');
-    case 'addCustomer':       return 'cust:'       + String(payload.deliveryAddress || '').trim();
-    case 'updateCustomer':    return 'cust-upd:'   + payload.customerId;
-    case 'bulkUpsertLogs':    return 'logs-bulk:'  + (payload.logs || []).map(l => l.logId || '?').join(',');
-    case 'updateLogEntry':    return 'log-upd:'    + payload.logId;
-    case 'updateBill':        return 'bill-upd:'   + payload.billId;
-    case 'addPausePeriod':    return 'pause:'      + payload.customerId + ':' + payload.startDate;
-    case 'finalizeBill':      return 'bill-fin:'   + payload.billId;
-    case 'lockBill':          return 'bill-lock:'  + payload.billId;
-    case 'generateMonthBill': return 'bill-gen:'   + payload.customerId + ':' + payload.month;
-    case 'addMilkImport':     return 'milk-imp:'   + payload.date + ':' + payload.brandName;
-    case 'updateMilkImport':  return 'milk-upd:'   + payload.importId;
-    case 'confirmMilkImport': return 'milk-conf:'  + payload.importId;
-    default:                  return action + ':'  + JSON.stringify(payload).substring(0, 80);
-  }
+  const formatter = ENTITY_KEY_FORMATS[action];
+  if (formatter) return formatter(payload);
+  return `${action}:${JSON.stringify(payload).substring(0, 80)}`;
 }
+// Expose for testing
+window.resolveEntityKey = resolveEntityKey;
 
 // ── Pending state (optimistic UI overlay) ─────────────────────────────────────
 window.pendingState = new Map();
 
 window.updateUnsavedIndicator = function () {
   const count = window.writeQueue ? window.writeQueue.size() : 0;
-  // Dispatch a custom event that the React tree can listen to
   window.dispatchEvent(new CustomEvent('milkapp:queuechange', { detail: { count } }));
-  // Also update the browser tab title as a simple visual cue
   document.title = count > 0
     ? `(${count} pending) Milk Admin V17`
     : 'Milk Admin V17';
@@ -116,7 +107,6 @@ class WriteQueueManager {
     this._snapshot = [];
     this._flushTimer = null;
 
-    // Cross-tab sync via BroadcastChannel (not available in all browsers)
     this._channel = typeof BroadcastChannel !== 'undefined'
       ? new BroadcastChannel('milkapp_queue_v17')
       : null;
@@ -125,23 +115,37 @@ class WriteQueueManager {
       let _debounceTimer = null;
       this._channel.onmessage = e => {
         if (!this.isReady) return;
-        if (e.data?.type === 'flush_needed') {
-          clearTimeout(_debounceTimer);
-          _debounceTimer = setTimeout(() => this.flush(), 200);
-        }
-        if (e.data?.type === 'entry_deleted') {
-          this._removeFromSnapshot(e.data.entityKey);
-          window.pendingState.delete(e.data.entityKey);
-          this._size = Math.max(0, this._size - 1);
-          window.updateUnsavedIndicator();
-        }
-        if (e.data?.type === 'state_update') {
-          if (e.data.size !== undefined)     this._size = e.data.size;
-          if (e.data.snapshot)               this._snapshot = e.data.snapshot;
-          window.updateUnsavedIndicator();
-        }
+        this._handleChannelMessage(e.data, _debounceTimer, (timer) => { _debounceTimer = timer; });
       };
       window.addEventListener('beforeunload', () => this._channel?.close());
+    }
+  }
+
+  _handleFlushNeeded(debounceTimer, setDebounceTimer) {
+    clearTimeout(debounceTimer);
+    setDebounceTimer(setTimeout(() => this.flush(), 200));
+  }
+
+  _handleEntryDeleted(entityKey) {
+    this._removeFromSnapshot(entityKey);
+    window.pendingState.delete(entityKey);
+    this._size = Math.max(0, this._size - 1);
+    window.updateUnsavedIndicator();
+  }
+
+  _handleStateUpdate(data) {
+    if (data.size !== undefined) this._size = data.size;
+    if (data.snapshot) this._snapshot = data.snapshot;
+    window.updateUnsavedIndicator();
+  }
+
+  // REFACTORED: Reduced complexity by removing optional chaining and using early returns
+  _handleChannelMessage(data, debounceTimer, setDebounceTimer) {
+    if (!data) return;
+    switch (data.type) {
+      case 'flush_needed':  return this._handleFlushNeeded(debounceTimer, setDebounceTimer);
+      case 'entry_deleted': return this._handleEntryDeleted(data.entityKey);
+      case 'state_update':  return this._handleStateUpdate(data);
     }
   }
 
@@ -188,8 +192,6 @@ class WriteQueueManager {
   size() { return this._size; }
 
   // ── Low-level IDB operation wrapper ────────────────────────────────────────
-  // Rule 15 from your spec: IndexedDB writes resolve on tx.oncomplete,
-  // not req.onsuccess, to guarantee durability before we consider them done.
   async _dbOp(mode, fn, useOnComplete = false) {
     if (!this.db) await this.init();
     return new Promise((resolve, reject) => {
@@ -220,39 +222,64 @@ class WriteQueueManager {
   }
 
   // ── add ────────────────────────────────────────────────────────────────────
-  async add(action, payload) {
-    if (this._size >= QUEUE_SIZE_MAX) {
-      const dead = this._snapshot.filter(w => w.status === 'dead');
-      if (dead.length > 0) {
-        window.showToast?.(`Queue full — clearing ${dead.length} dead write(s)`, 'warning');
-        for (const d of dead) await this.delete(d.entityKey);
-      }
-      if (this._size >= QUEUE_SIZE_MAX) {
-        throw new Error(`Write queue is full (${QUEUE_SIZE_MAX}). Wait for flush.`);
-      }
-    }
+  _isUpdateAction(action) {
+    return /^(update|record|finalize|lock|confirm)/.test(action);
+  }
 
-    const entityKey     = resolveEntityKey(action, payload);
-    const idempotencyKey = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
-
-    // Merge updates into an existing pending entry for the same entity
-    const isUpdate = /^(update|record|finalize|lock|confirm)/.test(action);
-    if (isUpdate) {
-      try {
-        const existing = await this._dbOp('readonly', s => s.get(entityKey));
-        if (existing?.status === 'pending') {
-          const merged = { ...existing.payload, ...payload, idempotencyKey: existing.idempotencyKey };
-          const updated = { ...existing, payload: merged, lastAttempt: null };
-          await this._dbOp('readwrite', s => s.put(updated), true);
-          this._updateSnapshot(updated);
-          return entityKey;
-        }
-      } catch { /* merge failed — fall through to a fresh entry */ }
-    }
-
-    const jitter = [10000, 30000, 60000, 120000, 300000].map(
+  _generateJitterSchedule() {
+    return [10000, 30000, 60000, 120000, 300000].map(
       b => b + Math.floor(b * 0.3 * (Math.random() * 2 - 1))
     );
+  }
+
+  _generateIdempotencyKey() {
+    return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+  }
+
+  async _tryMergeWithExisting(entityKey, payload) {
+    const existing = await this._dbOp('readonly', s => s.get(entityKey));
+    if (existing?.status === 'pending') {
+      const merged = { ...existing.payload, ...payload, idempotencyKey: existing.idempotencyKey };
+      const updated = { ...existing, payload: merged, lastAttempt: null };
+      await this._dbOp('readwrite', s => s.put(updated), true);
+      this._updateSnapshot(updated);
+      return true;
+    }
+    return false;
+  }
+
+  _getDeadWrites() {
+    return this._snapshot.filter(w => w.status === 'dead');
+  }
+
+  async _clearDeadWrites(dead) {
+    window.showToast?.(`Queue full — clearing ${dead.length} dead write(s)`, 'warning');
+    for (const d of dead) await this.delete(d.entityKey);
+  }
+
+  async _clearDeadWritesIfNeeded() {
+    if (this._size < QUEUE_SIZE_MAX) return;
+    const dead = this._getDeadWrites();
+    if (dead.length > 0) {
+      await this._clearDeadWrites(dead);
+    }
+    if (this._size >= QUEUE_SIZE_MAX) {
+      throw new Error(`Write queue is full (${QUEUE_SIZE_MAX}). Wait for flush.`);
+    }
+  }
+
+  async add(action, payload) {
+    await this._clearDeadWritesIfNeeded();
+
+    const entityKey = resolveEntityKey(action, payload);
+    const idempotencyKey = this._generateIdempotencyKey();
+
+    if (this._isUpdateAction(action)) {
+      try {
+        const merged = await this._tryMergeWithExisting(entityKey, payload);
+        if (merged) return entityKey;
+      } catch { /* merge failed — fall through to a fresh entry */ }
+    }
 
     const write = {
       entityKey,
@@ -263,7 +290,7 @@ class WriteQueueManager {
       retryCount: 0,
       lastAttempt: null,
       createdAt: Date.now(),
-      jitterSchedule: jitter,
+      jitterSchedule: this._generateJitterSchedule(),
     };
 
     await this._dbOp('readwrite', s => s.put(write), true);
@@ -306,51 +333,94 @@ class WriteQueueManager {
   }
 
   // ── flush ──────────────────────────────────────────────────────────────────
+  _getRetryDelay(w) {
+    return (w.jitterSchedule || [10000, 30000, 60000, 120000, 300000])[Math.min(w.retryCount, 4)];
+  }
+
+  // REFACTORED: Reduced complexity by combining conditions
+  _shouldProcessWrite(w, now) {
+    if (w.status === 'pending') return true;
+    if (w.status !== 'failed' || w.retryCount >= MAX_RETRIES) return false;
+    return now - (w.lastAttempt || 0) > this._getRetryDelay(w);
+  }
+
+  _isSuccessResponse(res) {
+    return res.success || ['DUPLICATE', 'CONFLICT', 'VERSION_CONFLICT'].includes(res.error?.code);
+  }
+
+  async _callUpstream(w) {
+    try { return await window.apiCall(w.action, w.payload); }
+    catch { return { success: false, error: { code: 'NETWORK_ERROR' } }; }
+  }
+
+  async _handleWriteSuccess(w) {
+    await this.delete(w.entityKey);
+  }
+
+  async _handleWriteFailure(w) {
+    w.retryCount++;
+    w.status = w.retryCount >= MAX_RETRIES ? 'dead' : 'failed';
+    try { await this._dbOp('readwrite', s => s.put(w)); } catch { /* best effort */ }
+    this._updateSnapshot(w);
+  }
+
+  async _processWrite(w, now) {
+    w.status = 'sending';
+    w.lastAttempt = now;
+    try { await this._dbOp('readwrite', s => s.put(w)); } catch { return; }
+
+    const res = await this._callUpstream(w);
+
+    if (this._isSuccessResponse(res)) {
+      await this._handleWriteSuccess(w);
+    } else {
+      await this._handleWriteFailure(w);
+    }
+  }
+
+  async _getPendingWrites() {
+    try { return await this.getAll(); }
+    catch (e) { console.error('[Queue] getAll failed during flush:', e); return []; }
+  }
+
+  _filterWritesToProcess(all, now) {
+    return all.filter(w => this._shouldProcessWrite(w, now));
+  }
+
+  _filterDeadWrites(all) {
+    return all.filter(w => w.status === 'dead');
+  }
+
+  async _processBatch(toProcess, now) {
+    for (const w of toProcess) {
+      await this._processWrite(w, now);
+    }
+  }
+
+  // REFACTORED: Extracted post-flush logic to reduce complexity of main flush()
+  _postFlushActions(toProcess) {
+    window.updateUnsavedIndicator();
+    this.scheduleFlush();
+    if (this._channel && toProcess.length > 0) {
+      this._channel.postMessage({ type: 'flush_needed' });
+    }
+  }
+
   async flush() {
     if (this._flushing) return;
     this._flushing = true;
     try {
-      let all;
-      try { all = await this.getAll(); }
-      catch (e) { console.error('[Queue] getAll failed during flush:', e); return; }
+      const all = await this._getPendingWrites();
+      if (!all) return;
 
       const now = Date.now();
-      const toProcess = all.filter(w => {
-        if (w.status === 'pending') return true;
-        if (w.status !== 'failed')  return false;
-        if (w.retryCount >= MAX_RETRIES) return false;
-        const delay = (w.jitterSchedule || [10000, 30000, 60000, 120000, 300000])[Math.min(w.retryCount, 4)];
-        return now - (w.lastAttempt || 0) > delay;
-      });
-
-      const dead = all.filter(w => w.status === 'dead');
+      const toProcess = this._filterWritesToProcess(all, now);
+      const dead = this._filterDeadWrites(all);
+      
       if (dead.length > 0) this._showDeadWritesModal(dead);
-
-      for (const w of toProcess) {
-        w.status      = 'sending';
-        w.lastAttempt = now;
-        try { await this._dbOp('readwrite', s => s.put(w)); } catch { continue; }
-
-        let res;
-        try { res = await window.apiCall(w.action, w.payload); }
-        catch { res = { success: false, error: { code: 'NETWORK_ERROR' } }; }
-
-        const shouldMarkDone = res.success || ['DUPLICATE', 'CONFLICT', 'VERSION_CONFLICT'].includes(res.error?.code);
-        if (shouldMarkDone) {
-          await this.delete(w.entityKey);
-        } else {
-          w.retryCount++;
-          w.status = w.retryCount >= MAX_RETRIES ? 'dead' : 'failed';
-          try { await this._dbOp('readwrite', s => s.put(w)); } catch { /* best effort */ }
-          this._updateSnapshot(w);
-        }
-      }
-
-      window.updateUnsavedIndicator();
-      this.scheduleFlush();
-      if (this._channel && toProcess.length > 0) {
-        this._channel.postMessage({ type: 'flush_needed' });
-      }
+      await this._processBatch(toProcess, now);
+      
+      this._postFlushActions(toProcess);
     } finally {
       this._flushing = false;
     }
@@ -471,7 +541,6 @@ window.queueWrite = async function (action, payload) {
 window.writeQueue = new WriteQueueManager();
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Register service worker
   if ('serviceWorker' in navigator) {
     try {
       const reg = await navigator.serviceWorker.register('/sw.js');
@@ -493,7 +562,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Initialise the write queue (opens IndexedDB, loads any persisted writes)
   try {
     await window.writeQueue.init();
     window.writeQueue.flush();

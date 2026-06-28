@@ -42,6 +42,31 @@ const SHELL = [
 // can't know at author-time. Parse the served /index.html instead and precache
 // every script/stylesheet/manifest/modulepreload it points at. Keeps us in
 // sync with hash rotation and manualChunks splits automatically.
+function _extractScriptUrls(html) {
+  const urls = new Set();
+  for (const m of html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)) {
+    urls.add(m[1]);
+  }
+  return urls;
+}
+
+function _extractLinkUrls(html) {
+  const urls = new Set();
+  for (const m of html.matchAll(/<link[^>]+href=["']([^"']+)["']/gi)) {
+    urls.add(m[1]);
+  }
+  return urls;
+}
+
+function _normalizeUrls(urls, origin) {
+  return [...urls]
+    .map(u => {
+      try { return new URL(u, origin); } catch { return null; }
+    })
+    .filter(u => u && u.origin === origin)
+    .map(u => u.pathname);
+}
+
 async function discoverAssets() {
   const urls = new Set();
   try {
@@ -49,14 +74,8 @@ async function discoverAssets() {
     if (!res.ok) return [];
     const html = await res.text();
 
-    // <script src="…"> — the React entry + any modulepreloaded chunks
-    for (const m of html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)) {
-      urls.add(m[1]);
-    }
-    // <link href="…"> — stylesheets, manifest, modulepreload, icons
-    for (const m of html.matchAll(/<link[^>]+href=["']([^"']+)["']/gi)) {
-      urls.add(m[1]);
-    }
+    _extractScriptUrls(html).forEach(u => urls.add(u));
+    _extractLinkUrls(html).forEach(u => urls.add(u));
   } catch (err) {
     // Network failed during install (unlikely — install only runs online).
     // Fall back to SHELL only; runtime /assets/ caching still backstops us.
@@ -64,14 +83,7 @@ async function discoverAssets() {
     return [];
   }
 
-  // Normalise to same-origin pathnames and drop anything odd.
-  const origin = self.location.origin;
-  return [...urls]
-    .map(u => {
-      try { return new URL(u, origin); } catch { return null; }
-    })
-    .filter(u => u && u.origin === origin)
-    .map(u => u.pathname);
+  return _normalizeUrls(urls, self.location.origin);
 }
 
 // ── Install: pre-cache shell + hashed bundles ────────────────────────────────
@@ -105,76 +117,92 @@ self.addEventListener('activate', e => {
 });
 
 // ── Fetch: routing strategy ───────────────────────────────────────────────────
+function _isApiCall(url) {
+  return url.pathname.startsWith('/api') || url.pathname.includes('/.netlify/functions/');
+}
+
+async function _fetchAndCache(request) {
+  const fresh = await fetch(request);
+  if (fresh.ok) {
+    const cache = await caches.open(CACHE);
+    cache.put(request, fresh.clone());
+  }
+  return fresh;
+}
+
+async function _cacheMatchOrError(request) {
+  const cached = await caches.match(request);
+  return cached || new Response('', { status: 503 });
+}
+
+async function _handleAssetRequest(request) {
+  const cached = await caches.match(request);
+  if (cached) return cached;
+  try {
+    return await _fetchAndCache(request);
+  } catch {
+    return await _cacheMatchOrError(request);
+  }
+}
+
+function _getOfflineFallback(request) {
+  if (request.mode === 'navigate') {
+    return new Response('<h1>Offline</h1><p>Reconnect and refresh.</p>', {
+      status: 503, headers: { 'Content-Type': 'text/html' },
+    });
+  }
+  return new Response('', { status: 503 });
+}
+
+async function _handleShellRequest(request) {
+  const cached = await caches.match(request);
+  if (cached) return cached;
+  try {
+    return await _fetchAndCache(request);
+  } catch {
+    const fallback = await caches.match('/index.html');
+    return fallback || _getOfflineFallback(request);
+  }
+}
+
+async function _handleNetworkFirstRequest(request) {
+  try {
+    return await _fetchAndCache(request);
+  } catch {
+    return await _cacheMatchOrError(request);
+  }
+}
+
+// REFACTORED: Extracted the '||' logic into a helper to drop cyclomatic complexity
+function _isShellUrl(path) {
+  return path === '/' || SHELL.includes(path);
+}
+
+// Complexity is now 4 (Base 1 + 3 'if' statements)
+function determineFetchStrategy(url) {
+  if (_isApiCall(url)) return 'pass-through';
+  if (url.pathname.startsWith('/assets/')) return 'asset';
+  if (_isShellUrl(url.pathname)) return 'shell';
+  return 'network-first';
+}
+
+// Map strategies directly to handler functions to eliminate the switch statement
+const STRATEGY_HANDLERS = {
+  'asset': _handleAssetRequest,
+  'shell': _handleShellRequest,
+  'network-first': _handleNetworkFirstRequest,
+};
+
+// Complexity reduced by using a lookup map instead of a switch statement
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
+  const strategy = determineFetchStrategy(url);
+  const handler = STRATEGY_HANDLERS[strategy];
 
-  // API calls: always network, never cache
-  if (url.pathname.startsWith('/api') || url.pathname.includes('/.netlify/functions/')) {
-    return; // pass-through — no respondWith()
+  // 'pass-through' is not in the map, so handler will be undefined, and we do nothing
+  if (handler) {
+    e.respondWith(handler(e.request));
   }
-
-  // Fix #10 — Vite assets: cache-first.
-  // Filenames are content-hashed (e.g. /assets/index-Abc123.js) so a given
-  // URL is immutable. Cache on first fetch; serve from cache forever after.
-  // (Fix #12 also precaches these at install, so offline revisits hit cache.)
-  if (url.pathname.startsWith('/assets/')) {
-    e.respondWith((async () => {
-      const cached = await caches.match(e.request);
-      if (cached) return cached;
-      try {
-        const fresh = await fetch(e.request);
-        if (fresh.ok) {
-          const cache = await caches.open(CACHE);
-          cache.put(e.request, fresh.clone());
-        }
-        return fresh;
-      } catch {
-        // Asset not cached yet and network is down — nothing we can serve
-        return new Response('', { status: 503 });
-      }
-    })());
-    return;
-  }
-
-  // Shell files: cache-first
-  if (SHELL.includes(url.pathname) || url.pathname === '/') {
-    e.respondWith((async () => {
-      const cached = await caches.match(e.request);
-      if (cached) return cached;
-      try {
-        const fresh = await fetch(e.request);
-        const cache = await caches.open(CACHE);
-        cache.put(e.request, fresh.clone());
-        return fresh;
-      } catch {
-        if (e.request.mode === 'navigate') {
-          return (
-            (await caches.match('/index.html')) ||
-            new Response('<h1>Offline</h1><p>Reconnect and refresh.</p>', {
-              status: 503, headers: { 'Content-Type': 'text/html' },
-            })
-          );
-        }
-        return new Response('', { status: 503 });
-      }
-    })());
-    return;
-  }
-
-  // Everything else: network-first with cache fallback
-  e.respondWith((async () => {
-    try {
-      const fresh = await fetch(e.request);
-      if (fresh.ok) {
-        const cache = await caches.open(CACHE);
-        cache.put(e.request, fresh.clone());
-      }
-      return fresh;
-    } catch {
-      const cached = await caches.match(e.request);
-      return cached || new Response('', { status: 503 });
-    }
-  })());
 });
 
 // ── Message: SKIP_WAITING (for update-on-refresh UX) ─────────────────────────
