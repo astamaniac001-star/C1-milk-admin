@@ -11,19 +11,7 @@ import { useAppHandlers } from "./hooks/useAppHandlers.js";
 export default function App() {
   const state = useAppState();
 
-  const handlers = useAppHandlers({
-    customers: state.customers, setCustomers: state.setCustomers,
-    imports: state.imports, setImports: state.setImports,
-    bills: state.bills, setBills: state.setBills,
-    logs: state.logs, setLogs: state.setLogs,
-    adjustments: state.adjustments, setAdjustments: state.setAdjustments,
-    pauses: state.pauses, setPauses: state.setPauses,
-    brands: state.brands, setBrands: state.setBrands,
-    queue: state.queue, setQueue: state.setQueue,
-    form: state.form, modal: state.modal,
-    today: state.today, billMonth: state.billMonth,
-    toast$: state.toast$, closeModal: state.closeModal, activeC: state.activeC,
-  });
+ const handlers = useAppHandlers(state);
 
   const footer = (
     <>

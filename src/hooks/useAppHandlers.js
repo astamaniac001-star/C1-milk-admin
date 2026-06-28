@@ -199,13 +199,14 @@ function useOtherHandlers({ setLogs, bills, toast$ }) {
 }
 
 // ── Main hook composition ───────────────────────────────────────────────────────
-export function useAppHandlers({
-  customers, bills,
-  setCustomers, setImports, setBills, setLogs, setAdjustments, setPauses, setBrands, setQueue,
-  form, modal,
-  today, billMonth,
-  toast$, closeModal, activeC,
-}) {
+export function useAppHandlers(state) {
+  const {
+    customers, bills,
+    setCustomers, setImports, setBills, setLogs, setAdjustments, setPauses, setBrands, setQueue,
+    form, modal,
+    today, billMonth,
+    toast$, closeModal, activeC,
+  } = state;
   const customerHandlers = useCustomerHandlers({ setCustomers, form, toast$, closeModal });
   const importHandlers = useImportHandlers({ setImports, form, toast$, closeModal });
   const billHandlers = useBillHandlers({ setBills, form, modal, toast$, closeModal, activeC, bills, billMonth });
