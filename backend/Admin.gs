@@ -1,5 +1,3 @@
-
-
 /**
  * ============================================================================
  * MILK DELIVERY ADMIN — V17 BACKEND
@@ -36,23 +34,29 @@ const CURRENT_API_VERSION = 17;
 function healthCheck() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const requiredSheets = Object.keys(SHEET_NAMES).map(function (k) { return SHEET_NAMES[k]; });
-    const actualSheets = ss.getSheets().map(function (s) { return s.getName(); });
-    const missing = requiredSheets.filter(function (name) { return actualSheets.indexOf(name) === -1; });
+    const requiredSheets = Object.keys(SHEET_NAMES).map(function (k) {
+      return SHEET_NAMES[k];
+    });
+    const actualSheets = ss.getSheets().map(function (s) {
+      return s.getName();
+    });
+    const missing = requiredSheets.filter(function (name) {
+      return actualSheets.indexOf(name) === -1;
+    });
 
-    const schemaVersion = Number(getSettingValue('SchemaVersion') || '0');
+    const schemaVersion = Number(getSettingValue("SchemaVersion") || "0");
     const migrationNeeded = schemaVersion < CURRENT_SCHEMA_VERSION;
 
     return respond(true, {
       ok: missing.length === 0,
       missingSheets: missing,
       schemaVersion: schemaVersion,
-      apiVersion: Number(getSettingValue('APIVersion') || '0'),
+      apiVersion: Number(getSettingValue("APIVersion") || "0"),
       migrationNeeded: migrationNeeded,
       timestamp: nowISTTimestamp(),
     });
   } catch (e) {
-    return respond(false, null, { code: 'SYSTEM_ERROR', message: e.message });
+    return respond(false, null, { code: "SYSTEM_ERROR", message: e.message });
   }
 }
 
@@ -70,19 +74,27 @@ function healthCheck() {
 function getSheetNamesAction() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const actual = ss.getSheets().map(function (s) { return s.getName(); });
-    const expected = Object.keys(SHEET_NAMES).map(function (k) { return SHEET_NAMES[k]; });
+    const actual = ss.getSheets().map(function (s) {
+      return s.getName();
+    });
+    const expected = Object.keys(SHEET_NAMES).map(function (k) {
+      return SHEET_NAMES[k];
+    });
 
-    const missing = expected.filter(function (name) { return actual.indexOf(name) === -1; });
-    const unexpected = actual.filter(function (name) { return expected.indexOf(name) === -1; });
+    const missing = expected.filter(function (name) {
+      return actual.indexOf(name) === -1;
+    });
+    const unexpected = actual.filter(function (name) {
+      return expected.indexOf(name) === -1;
+    });
 
     return respond(true, {
       actual: actual,
       expected: expected,
-      drift: { missing: missing, unexpected: unexpected }
+      drift: { missing: missing, unexpected: unexpected },
     });
   } catch (e) {
-    return respond(false, null, { code: 'SYSTEM_ERROR', message: e.message });
+    return respond(false, null, { code: "SYSTEM_ERROR", message: e.message });
   }
 }
 
@@ -97,186 +109,405 @@ function runDiagnostics() {
   try {
     const checks = [];
     const push = function (id, label, status, detail, count) {
-      checks.push({ id: id, label: label, status: status, detail: detail || '', count: count !== undefined ? count : null });
+      checks.push({
+        id: id,
+        label: label,
+        status: status,
+        detail: detail || "",
+        count: count !== undefined ? count : null,
+      });
     };
 
     // 1. Missing sheets
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const actualSheets = ss.getSheets().map(function (s) { return s.getName(); });
-    const expectedSheets = Object.keys(SHEET_NAMES).map(function (k) { return SHEET_NAMES[k]; });
-    const missingSheets = expectedSheets.filter(function (n) { return actualSheets.indexOf(n) === -1; });
-    push(1, 'Missing sheets', missingSheets.length === 0 ? 'ok' : 'error', missingSheets.join(', '), missingSheets.length);
+    const actualSheets = ss.getSheets().map(function (s) {
+      return s.getName();
+    });
+    const expectedSheets = Object.keys(SHEET_NAMES).map(function (k) {
+      return SHEET_NAMES[k];
+    });
+    const missingSheets = expectedSheets.filter(function (n) {
+      return actualSheets.indexOf(n) === -1;
+    });
+    push(
+      1,
+      "Missing sheets",
+      missingSheets.length === 0 ? "ok" : "error",
+      missingSheets.join(", "),
+      missingSheets.length,
+    );
 
     // If core sheets are missing, bail early — every other check below would throw.
     if (missingSheets.length > 0) {
-      push(99, 'Diagnostics incomplete', 'error', 'Cannot run remaining checks until missing sheets are created', missingSheets.length);
-      return respond(true, { checks: checks, totalIssues: checks.filter(function (c) { return c.status !== 'ok'; }).length });
+      push(
+        99,
+        "Diagnostics incomplete",
+        "error",
+        "Cannot run remaining checks until missing sheets are created",
+        missingSheets.length,
+      );
+      return respond(true, {
+        checks: checks,
+        totalIssues: checks.filter(function (c) {
+          return c.status !== "ok";
+        }).length,
+      });
     }
 
     // 2 & 3. Products: blank ShortCode / duplicate ShortCode (Products sheet
     // is referenced in your spec but its schema wasn't defined in Parts 1-3;
     // this check degrades gracefully if the sheet or column is absent.)
     try {
-      const prodSheet = getSheet('PRODUCTS');
+      const prodSheet = getSheet("PRODUCTS");
       const prodHdr = buildHeaderMap(prodSheet);
       const prodLastRow = prodSheet.getLastRow();
-      if (prodLastRow >= 2 && prodHdr['ShortCode'] !== undefined && prodHdr['Status'] !== undefined) {
-        const products = prodSheet.getRange(2, 1, prodLastRow - 1, prodSheet.getLastColumn()).getValues();
-        const active = products.filter(function (r) { return r[prodHdr['Status']] === 'Active'; });
-        const blankCodes = active.filter(function (r) { return !String(r[prodHdr['ShortCode']] || '').trim(); });
-        push(2, 'Active products with blank ShortCode', blankCodes.length === 0 ? 'ok' : 'warning', '', blankCodes.length);
+      if (
+        prodLastRow >= 2 &&
+        prodHdr["ShortCode"] !== undefined &&
+        prodHdr["Status"] !== undefined
+      ) {
+        const products = prodSheet
+          .getRange(2, 1, prodLastRow - 1, prodSheet.getLastColumn())
+          .getValues();
+        const active = products.filter(function (r) {
+          return r[prodHdr["Status"]] === "Active";
+        });
+        const blankCodes = active.filter(function (r) {
+          return !String(r[prodHdr["ShortCode"]] || "").trim();
+        });
+        push(
+          2,
+          "Active products with blank ShortCode",
+          blankCodes.length === 0 ? "ok" : "warning",
+          "",
+          blankCodes.length,
+        );
 
         const codeCounts = {};
         active.forEach(function (r) {
-          const code = String(r[prodHdr['ShortCode']] || '').trim();
+          const code = String(r[prodHdr["ShortCode"]] || "").trim();
           if (code) codeCounts[code] = (codeCounts[code] || 0) + 1;
         });
-        const dupCodes = Object.keys(codeCounts).filter(function (c) { return codeCounts[c] > 1; });
-        push(3, 'Duplicate ShortCodes', dupCodes.length === 0 ? 'ok' : 'error', dupCodes.join(', '), dupCodes.length);
+        const dupCodes = Object.keys(codeCounts).filter(function (c) {
+          return codeCounts[c] > 1;
+        });
+        push(
+          3,
+          "Duplicate ShortCodes",
+          dupCodes.length === 0 ? "ok" : "error",
+          dupCodes.join(", "),
+          dupCodes.length,
+        );
       } else {
-        push(2, 'Active products with blank ShortCode', 'warning', 'Products sheet/columns not fully set up', 0);
-        push(3, 'Duplicate ShortCodes', 'warning', 'Products sheet/columns not fully set up', 0);
+        push(
+          2,
+          "Active products with blank ShortCode",
+          "warning",
+          "Products sheet/columns not fully set up",
+          0,
+        );
+        push(
+          3,
+          "Duplicate ShortCodes",
+          "warning",
+          "Products sheet/columns not fully set up",
+          0,
+        );
       }
     } catch (e) {
-      push(2, 'Active products with blank ShortCode', 'warning', 'Products sheet not found', 0);
-      push(3, 'Duplicate ShortCodes', 'warning', 'Products sheet not found', 0);
+      push(
+        2,
+        "Active products with blank ShortCode",
+        "warning",
+        "Products sheet not found",
+        0,
+      );
+      push(3, "Duplicate ShortCodes", "warning", "Products sheet not found", 0);
     }
 
     // 4. Duplicate active DeliveryAddresses
-    const custSheet = getSheet('CUSTOMERS');
+    const custSheet = getSheet("CUSTOMERS");
     const custHdr = buildHeaderMap(custSheet);
     const custLastRow = custSheet.getLastRow();
     let customers = [];
     if (custLastRow >= 2) {
-      customers = custSheet.getRange(2, 1, custLastRow - 1, custSheet.getLastColumn()).getValues();
+      customers = custSheet
+        .getRange(2, 1, custLastRow - 1, custSheet.getLastColumn())
+        .getValues();
       const addrCounts = {};
-      customers.filter(function (r) { return r[custHdr['Status']] === 'Active'; }).forEach(function (r) {
-        const addr = String(r[custHdr['DeliveryAddress']] || '').trim().toLowerCase();
-        if (addr) addrCounts[addr] = (addrCounts[addr] || 0) + 1;
+      customers
+        .filter(function (r) {
+          return r[custHdr["Status"]] === "Active";
+        })
+        .forEach(function (r) {
+          const addr = String(r[custHdr["DeliveryAddress"]] || "")
+            .trim()
+            .toLowerCase();
+          if (addr) addrCounts[addr] = (addrCounts[addr] || 0) + 1;
+        });
+      const dupAddrs = Object.keys(addrCounts).filter(function (a) {
+        return addrCounts[a] > 1;
       });
-      const dupAddrs = Object.keys(addrCounts).filter(function (a) { return addrCounts[a] > 1; });
-      push(4, 'Duplicate active DeliveryAddresses', dupAddrs.length === 0 ? 'ok' : 'warning', '', dupAddrs.length);
+      push(
+        4,
+        "Duplicate active DeliveryAddresses",
+        dupAddrs.length === 0 ? "ok" : "warning",
+        "",
+        dupAddrs.length,
+      );
     } else {
-      push(4, 'Duplicate active DeliveryAddresses', 'ok', 'No customers yet', 0);
+      push(
+        4,
+        "Duplicate active DeliveryAddresses",
+        "ok",
+        "No customers yet",
+        0,
+      );
     }
 
     // 5 & 11. DailyLogsIndex — your spec references a month-based index sheet
     // (DailyLogsIndex) for performance at scale; not defined in Parts 1-3.
     // Reported as informational since DailyLogs itself works without it.
-    push(5, 'Missing current month DailyLogsIndex', 'warning', 'DailyLogsIndex not implemented in this build — DailyLogs sheet is read directly (fine until log volume is large)', null);
-    push(11, 'Months with logs missing DailyLogsIndex', 'warning', 'Same as check #5 — index not yet implemented', null);
+    push(
+      5,
+      "Missing current month DailyLogsIndex",
+      "warning",
+      "DailyLogsIndex not implemented in this build — DailyLogs sheet is read directly (fine until log volume is large)",
+      null,
+    );
+    push(
+      11,
+      "Months with logs missing DailyLogsIndex",
+      "warning",
+      "Same as check #5 — index not yet implemented",
+      null,
+    );
 
     // 6. Bills with StaleFlag = Yes
-    const billSheet = getSheet('BILLS');
+    const billSheet = getSheet("BILLS");
     const billHdr = buildHeaderMap(billSheet);
     const billLastRow = billSheet.getLastRow();
     let bills = [];
     if (billLastRow >= 2) {
-      bills = billSheet.getRange(2, 1, billLastRow - 1, billSheet.getLastColumn()).getValues();
-      const stale = bills.filter(function (r) { return r[billHdr['StaleFlag']] === true; });
-      push(6, 'Bills with StaleFlag = Yes', stale.length === 0 ? 'ok' : 'warning', '', stale.length);
+      bills = billSheet
+        .getRange(2, 1, billLastRow - 1, billSheet.getLastColumn())
+        .getValues();
+      const stale = bills.filter(function (r) {
+        return r[billHdr["StaleFlag"]] === true;
+      });
+      push(
+        6,
+        "Bills with StaleFlag = Yes",
+        stale.length === 0 ? "ok" : "warning",
+        "",
+        stale.length,
+      );
     } else {
-      push(6, 'Bills with StaleFlag = Yes', 'ok', 'No bills yet', 0);
+      push(6, "Bills with StaleFlag = Yes", "ok", "No bills yet", 0);
     }
 
     // 7. Unapplied adjustments > 60 days
-    const adjSheet = getSheet('ADJUSTMENTS');
+    const adjSheet = getSheet("ADJUSTMENTS");
     const adjHdr = buildHeaderMap(adjSheet);
     const adjLastRow = adjSheet.getLastRow();
     if (adjLastRow >= 2) {
-      const adjustments = adjSheet.getRange(2, 1, adjLastRow - 1, adjSheet.getLastColumn()).getValues();
+      const adjustments = adjSheet
+        .getRange(2, 1, adjLastRow - 1, adjSheet.getLastColumn())
+        .getValues();
       const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
-      const cutoffStr = Utilities.formatDate(cutoff, TIMEZONE, 'yyyy-MM-dd');
+      const cutoffStr = Utilities.formatDate(cutoff, TIMEZONE, "yyyy-MM-dd");
       const oldUnapplied = adjustments.filter(function (r) {
-        return r[adjHdr['Applied']] !== true && String(r[adjHdr['Date']]) < cutoffStr;
+        return (
+          r[adjHdr["Applied"]] !== true && String(r[adjHdr["Date"]]) < cutoffStr
+        );
       });
-      push(7, 'Unapplied adjustments > 60 days', oldUnapplied.length === 0 ? 'ok' : 'warning', '', oldUnapplied.length);
+      push(
+        7,
+        "Unapplied adjustments > 60 days",
+        oldUnapplied.length === 0 ? "ok" : "warning",
+        "",
+        oldUnapplied.length,
+      );
     } else {
-      push(7, 'Unapplied adjustments > 60 days', 'ok', 'No adjustments yet', 0);
+      push(7, "Unapplied adjustments > 60 days", "ok", "No adjustments yet", 0);
     }
 
     // 8. Untested actions
-    const untested = Array.from(ALLOWED_ACTIONS).filter(function (a) { return !TESTED_ACTIONS.has(a); });
-    push(8, 'Untested actions', untested.length === 0 ? 'ok' : 'error', untested.join(', '), untested.length);
+    const untested = Array.from(ALLOWED_ACTIONS).filter(function (a) {
+      return !TESTED_ACTIONS.has(a);
+    });
+    push(
+      8,
+      "Untested actions",
+      untested.length === 0 ? "ok" : "error",
+      untested.join(", "),
+      untested.length,
+    );
 
     // 9. AmountPaid drift (skips Locked) — read-only check version of
     // reconcileBillingLedger's correction logic
-    const paySheet = getSheet('PAYMENTS');
+    const paySheet = getSheet("PAYMENTS");
     const payHdr = buildHeaderMap(paySheet);
     const payLastRow = paySheet.getLastRow();
     const paymentsByBill = {};
     if (payLastRow >= 2) {
-      const payments = paySheet.getRange(2, 1, payLastRow - 1, paySheet.getLastColumn()).getValues();
+      const payments = paySheet
+        .getRange(2, 1, payLastRow - 1, paySheet.getLastColumn())
+        .getValues();
       payments.forEach(function (p) {
-        const billId = p[payHdr['BillId']];
-        paymentsByBill[billId] = Math.round(((paymentsByBill[billId] || 0) + Number(p[payHdr['Amount']])) * 100) / 100;
+        const billId = p[payHdr["BillId"]];
+        paymentsByBill[billId] =
+          Math.round(
+            ((paymentsByBill[billId] || 0) + Number(p[payHdr["Amount"]])) * 100,
+          ) / 100;
       });
     }
     let driftCount = 0;
     bills.forEach(function (b) {
-      if (b[billHdr['Locked']] === true) return;
-      const billId = b[billHdr['BillId']];
-      const recorded = Math.round(Number(b[billHdr['AmountPaid']]) * 100) / 100;
+      if (b[billHdr["Locked"]] === true) return;
+      const billId = b[billHdr["BillId"]];
+      const recorded = Math.round(Number(b[billHdr["AmountPaid"]]) * 100) / 100;
       const actual = Math.round((paymentsByBill[billId] || 0) * 100) / 100;
       if (recorded !== actual) driftCount++;
     });
-    push(9, 'AmountPaid drift (skips Locked)', driftCount === 0 ? 'ok' : 'error', 'Run reconcileBillingLedger to fix', driftCount);
+    push(
+      9,
+      "AmountPaid drift (skips Locked)",
+      driftCount === 0 ? "ok" : "error",
+      "Run reconcileBillingLedger to fix",
+      driftCount,
+    );
 
     // 10. SchemaVersion < 17
-    const schemaVersion = Number(getSettingValue('SchemaVersion') || '0');
-    push(10, 'SchemaVersion < ' + CURRENT_SCHEMA_VERSION, schemaVersion >= CURRENT_SCHEMA_VERSION ? 'ok' : 'error', 'Current: ' + schemaVersion, schemaVersion >= CURRENT_SCHEMA_VERSION ? 0 : 1);
+    const schemaVersion = Number(getSettingValue("SchemaVersion") || "0");
+    push(
+      10,
+      "SchemaVersion < " + CURRENT_SCHEMA_VERSION,
+      schemaVersion >= CURRENT_SCHEMA_VERSION ? "ok" : "error",
+      "Current: " + schemaVersion,
+      schemaVersion >= CURRENT_SCHEMA_VERSION ? 0 : 1,
+    );
 
     // 12. PINSalt not configured
-    const pinSalt = getSettingValue('PINSalt');
-    push(12, 'PINSalt not configured', pinSalt ? 'ok' : 'error', pinSalt ? '' : 'Run rotatePIN', pinSalt ? 0 : 1);
+    const pinSalt = getSettingValue("PINSalt");
+    push(
+      12,
+      "PINSalt not configured",
+      pinSalt ? "ok" : "error",
+      pinSalt ? "" : "Run rotatePIN",
+      pinSalt ? 0 : 1,
+    );
 
     // 13. High SystemState row count > 500
-    const sysSheet = getSheet('SYSTEM_STATE');
+    const sysSheet = getSheet("SYSTEM_STATE");
     const sysRowCount = Math.max(0, sysSheet.getLastRow() - 1);
-    push(13, 'High SystemState row count > 500', sysRowCount > 500 ? 'warning' : 'ok', 'Current: ' + sysRowCount, sysRowCount);
+    push(
+      13,
+      "High SystemState row count > 500",
+      sysRowCount > 500 ? "warning" : "ok",
+      "Current: " + sysRowCount,
+      sysRowCount,
+    );
 
     // 14. PINRate_ key count > 50
     let pinRateCount = 0;
     if (sysRowCount > 0) {
       const sysHdr = buildHeaderMap(sysSheet);
-      const sysValues = sysSheet.getRange(2, 1, sysRowCount, sysSheet.getLastColumn()).getValues();
-      pinRateCount = sysValues.filter(function (r) { return String(r[sysHdr['Key']] || '').indexOf('PINRate_') === 0; }).length;
+      const sysValues = sysSheet
+        .getRange(2, 1, sysRowCount, sysSheet.getLastColumn())
+        .getValues();
+      pinRateCount = sysValues.filter(function (r) {
+        return String(r[sysHdr["Key"]] || "").indexOf("PINRate_") === 0;
+      }).length;
     }
-    push(14, 'PINRate_ key count > 50', pinRateCount > 50 ? 'warning' : 'ok', 'Current: ' + pinRateCount, pinRateCount);
+    push(
+      14,
+      "PINRate_ key count > 50",
+      pinRateCount > 50 ? "warning" : "ok",
+      "Current: " + pinRateCount,
+      pinRateCount,
+    );
 
     // 15. Daily execution count > 150 — Apps Script quota monitoring.
     // No programmatic API for this; surfaced as informational reminder only.
-    push(15, 'Daily execution count > 150', 'warning', 'Not measurable from within the script — monitor via Apps Script dashboard quotas', null);
+    push(
+      15,
+      "Daily execution count > 150",
+      "warning",
+      "Not measurable from within the script — monitor via Apps Script dashboard quotas",
+      null,
+    );
 
     // 16. Failed batch flags in SystemState
     let failedBatchCount = 0;
     if (sysRowCount > 0) {
       const sysHdr2 = buildHeaderMap(sysSheet);
-      const sysValues2 = sysSheet.getRange(2, 1, sysRowCount, sysSheet.getLastColumn()).getValues();
-      failedBatchCount = sysValues2.filter(function (r) { return String(r[sysHdr2['Key']] || '').indexOf('FailedBatch_') === 0; }).length;
+      const sysValues2 = sysSheet
+        .getRange(2, 1, sysRowCount, sysSheet.getLastColumn())
+        .getValues();
+      failedBatchCount = sysValues2.filter(function (r) {
+        return String(r[sysHdr2["Key"]] || "").indexOf("FailedBatch_") === 0;
+      }).length;
     }
-    push(16, 'Failed batch flags in SystemState', failedBatchCount === 0 ? 'ok' : 'warning', '', failedBatchCount);
+    push(
+      16,
+      "Failed batch flags in SystemState",
+      failedBatchCount === 0 ? "ok" : "warning",
+      "",
+      failedBatchCount,
+    );
 
     // 17. Active products without open PriceHistory record — degrades
     // gracefully since PriceHistory sheet isn't defined in Parts 1-3
-    push(17, 'Active products without open PriceHistory record', 'warning', 'PriceHistory sheet not implemented in this build', null);
+    push(
+      17,
+      "Active products without open PriceHistory record",
+      "warning",
+      "PriceHistory sheet not implemented in this build",
+      null,
+    );
 
     // 18. sessionSecret validation active — informational status check
-    const appSecretConfigured = !!PropertiesService.getScriptProperties().getProperty('APP_SECRET');
-    push(18, 'sessionSecret validation active', appSecretConfigured ? 'ok' : 'warning', appSecretConfigured ? 'APP_SECRET is set' : 'APP_SECRET not set — sessionSecret checks are skipped', appSecretConfigured ? 0 : 1);
+    const appSecretConfigured =
+      !!PropertiesService.getScriptProperties().getProperty("APP_SECRET");
+    push(
+      18,
+      "sessionSecret validation active",
+      appSecretConfigured ? "ok" : "warning",
+      appSecretConfigured
+        ? "APP_SECRET is set"
+        : "APP_SECRET not set — sessionSecret checks are skipped",
+      appSecretConfigured ? 0 : 1,
+    );
 
     // 19. Milk import sheets present
-    const milkSheetsPresent = ['MILK_IMPORTS', 'MILK_BRANDS', 'MILK_TYPES'].every(function (key) {
+    const milkSheetsPresent = [
+      "MILK_IMPORTS",
+      "MILK_BRANDS",
+      "MILK_TYPES",
+    ].every(function (key) {
       return actualSheets.indexOf(SHEET_NAMES[key]) !== -1;
     });
-    push(19, 'Milk import sheets present', milkSheetsPresent ? 'ok' : 'error', '', milkSheetsPresent ? 0 : 1);
+    push(
+      19,
+      "Milk import sheets present",
+      milkSheetsPresent ? "ok" : "error",
+      "",
+      milkSheetsPresent ? 0 : 1,
+    );
 
-    const totalIssues = checks.filter(function (c) { return c.status !== 'ok'; }).length;
-    writeActivityLog('runDiagnostics', {}, { totalChecks: checks.length, totalIssues: totalIssues });
+    const totalIssues = checks.filter(function (c) {
+      return c.status !== "ok";
+    }).length;
+    writeActivityLog(
+      "runDiagnostics",
+      {},
+      { totalChecks: checks.length, totalIssues: totalIssues },
+    );
 
     return respond(true, { checks: checks, totalIssues: totalIssues });
   } catch (e) {
-    return respond(false, null, { code: 'SYSTEM_ERROR', message: e.message });
+    return respond(false, null, { code: "SYSTEM_ERROR", message: e.message });
   }
 }
 
@@ -295,62 +526,101 @@ function runDiagnostics() {
  */
 function runMigration(payload) {
   return withLock(function () {
-    const currentVersion = Number(getSettingValue('SchemaVersion') || '0');
+    const currentVersion = Number(getSettingValue("SchemaVersion") || "0");
 
     if (currentVersion >= CURRENT_SCHEMA_VERSION) {
-      return respond(true, { migrated: false, message: 'Already at schema version ' + currentVersion, schemaVersion: currentVersion });
+      return respond(true, {
+        migrated: false,
+        message: "Already at schema version " + currentVersion,
+        schemaVersion: currentVersion,
+      });
     }
     if (currentVersion < 13) {
-      return respond(false, null, { code: 'UNSUPPORTED_VERSION', message: 'Schema version ' + currentVersion + ' is too old for automated migration. Versions 13-16 are supported; earlier versions require manual migration.' });
+      return respond(false, null, {
+        code: "UNSUPPORTED_VERSION",
+        message:
+          "Schema version " +
+          currentVersion +
+          " is too old for automated migration. Versions 13-16 are supported; earlier versions require manual migration.",
+      });
     }
 
     // Purge known-obsolete SystemState key prefixes (B156)
-    const sysSheet = getSheet('SYSTEM_STATE');
+    const sysSheet = getSheet("SYSTEM_STATE");
     const sysHdr = buildHeaderMap(sysSheet);
     const sysLastRow = sysSheet.getLastRow();
     let purgedCount = 0;
 
     if (sysLastRow >= 2) {
-      const obsoletePrefixes = ['MilkImportsIndex_', 'InventorySnapshot_'];
-      const values = sysSheet.getRange(2, 1, sysLastRow - 1, sysSheet.getLastColumn()).getValues();
+      const obsoletePrefixes = ["MilkImportsIndex_", "InventorySnapshot_"];
+      const values = sysSheet
+        .getRange(2, 1, sysLastRow - 1, sysSheet.getLastColumn())
+        .getValues();
       const rowsToDelete = [];
       values.forEach(function (row, i) {
-        const key = String(row[sysHdr['Key']] || '');
-        if (obsoletePrefixes.some(function (p) { return key.indexOf(p) === 0; })) {
+        const key = String(row[sysHdr["Key"]] || "");
+        if (
+          obsoletePrefixes.some(function (p) {
+            return key.indexOf(p) === 0;
+          })
+        ) {
           rowsToDelete.push(i + 2);
         }
       });
-      rowsToDelete.sort(function (a, b) { return b - a; }).forEach(function (rowIndex) {
-        sysSheet.deleteRow(rowIndex);
-        purgedCount++;
-      });
+      rowsToDelete
+        .sort(function (a, b) {
+          return b - a;
+        })
+        .forEach(function (rowIndex) {
+          sysSheet.deleteRow(rowIndex);
+          purgedCount++;
+        });
     }
 
     // Bump SchemaVersion / APIVersion
-    const settingsSheet = getSheet('SETTINGS');
+    const settingsSheet = getSheet("SETTINGS");
     const settingsHdr = buildHeaderMap(settingsSheet);
-    [['SchemaVersion', String(CURRENT_SCHEMA_VERSION)], ['APIVersion', String(CURRENT_API_VERSION)]].forEach(function (pair) {
-      const key = pair[0], value = pair[1];
-      const found = findRowByColumnValue(settingsSheet, settingsHdr, 'Key', key);
+    [
+      ["SchemaVersion", String(CURRENT_SCHEMA_VERSION)],
+      ["APIVersion", String(CURRENT_API_VERSION)],
+    ].forEach(function (pair) {
+      const key = pair[0],
+        value = pair[1];
+      const found = findRowByColumnValue(
+        settingsSheet,
+        settingsHdr,
+        "Key",
+        key,
+      );
       if (found) {
-        settingsSheet.getRange(found.rowIndex, settingsHdr['Value'] + 1).setValue(value);
+        settingsSheet
+          .getRange(found.rowIndex, settingsHdr["Value"] + 1)
+          .setValue(value);
       } else {
         const row = [];
-        row[settingsHdr['Key']] = key;
-        row[settingsHdr['Value']] = value;
+        row[settingsHdr["Key"]] = key;
+        row[settingsHdr["Value"]] = value;
         safeAppend(settingsSheet, row);
       }
     });
-    CacheService.getScriptCache().remove(SETTINGS_CACHE_KEY_PREFIX + 'SchemaVersion');
-    CacheService.getScriptCache().remove(SETTINGS_CACHE_KEY_PREFIX + 'APIVersion');
+    CacheService.getScriptCache().remove(
+      SETTINGS_CACHE_KEY_PREFIX + "SchemaVersion",
+    );
+    CacheService.getScriptCache().remove(
+      SETTINGS_CACHE_KEY_PREFIX + "APIVersion",
+    );
 
-    writeActivityLog('runMigration', payload, { fromVersion: currentVersion, toVersion: CURRENT_SCHEMA_VERSION, purgedCount: purgedCount });
+    writeActivityLog("runMigration", payload, {
+      fromVersion: currentVersion,
+      toVersion: CURRENT_SCHEMA_VERSION,
+      purgedCount: purgedCount,
+    });
 
     return respond(true, {
       migrated: true,
       fromVersion: currentVersion,
       toVersion: CURRENT_SCHEMA_VERSION,
-      purgedObsoleteKeys: purgedCount
+      purgedObsoleteKeys: purgedCount,
     });
   });
 }
@@ -360,15 +630,19 @@ function runMigration(payload) {
 //    irreversible operation. No shortcuts, no "soft" mode, no bypass.
 // ----------------------------------------------------------------------------
 
-const ERASE_CONFIRMATION_CODE = 'ERASE-ALL-DATA-PERMANENTLY';
+const ERASE_CONFIRMATION_CODE = "ERASE-ALL-DATA-PERMANENTLY";
 
 // Per your security model table: MILK_IMPORTS is transactional and IS
 // erased. MILK_BRANDS / MILK_TYPES are catalog data and are NOT erased (B154).
 const SHEETS_TO_ERASE = [
-  'CUSTOMERS', 'DAILY_LOGS', 'PAUSE_PERIODS',
-  'BILLS', 'PAYMENTS', 'ADJUSTMENTS',
-  'MILK_IMPORTS',
-  'ACTIVITY_LOG',
+  "CUSTOMERS",
+  "DAILY_LOGS",
+  "PAUSE_PERIODS",
+  "BILLS",
+  "PAYMENTS",
+  "ADJUSTMENTS",
+  "MILK_IMPORTS",
+  "ACTIVITY_LOG",
   // SYSTEM_STATE deliberately excluded from blanket erase — it holds the
   // active session/PIN-rate-limit state, not customer data. If you want
   // session data wiped too, do it via purgeExpiredSessions or manually.
@@ -384,12 +658,20 @@ const SHEETS_TO_ERASE = [
  */
 function eraseAllData(payload) {
   if (payload.confirmationCode !== ERASE_CONFIRMATION_CODE) {
-    return respond(false, null, { code: 'VALIDATION_ERROR', message: 'confirmationCode is required and must match exactly' });
+    return respond(false, null, {
+      code: "VALIDATION_ERROR",
+      message: "confirmationCode is required and must match exactly",
+    });
   }
 
-  const expectedSecret = PropertiesService.getScriptProperties().getProperty('APP_SECRET');
+  const expectedSecret =
+    PropertiesService.getScriptProperties().getProperty("APP_SECRET");
   if (!expectedSecret || payload.appSecret !== expectedSecret) {
-    return respond(false, null, { code: 'FORBIDDEN', message: 'Invalid app secret — erasure requires direct confirmation, not just a valid session' });
+    return respond(false, null, {
+      code: "FORBIDDEN",
+      message:
+        "Invalid app secret — erasure requires direct confirmation, not just a valid session",
+    });
   }
 
   return withLock(function () {
@@ -413,15 +695,32 @@ function eraseAllData(payload) {
 
     // Clear settings cache since this is a system-wide reset moment
     CacheService.getScriptCache().removeAll(
-      ['PINSalt', 'PINHash', 'SchemaVersion', 'APIVersion', 'MinDailyStockThreshold', 'MilkCategoryNames']
-        .map(function (k) { return SETTINGS_CACHE_KEY_PREFIX + k; })
+      [
+        "PINSalt",
+        "PINHash",
+        "SchemaVersion",
+        "APIVersion",
+        "MinDailyStockThreshold",
+        "MilkCategoryNames",
+      ].map(function (k) {
+        return SETTINGS_CACHE_KEY_PREFIX + k;
+      }),
     );
 
     // Log this one to the spreadsheet's own Logger AND attempt an
     // ActivityLog write even though ActivityLog itself was just cleared —
     // this becomes the first row of the new log, which is appropriate.
-    writeActivityLog('eraseAllData', { sheetsErased: SHEETS_TO_ERASE }, results);
-    Logger.log('[eraseAllData] DESTRUCTIVE OPERATION COMPLETED at ' + nowISTTimestamp() + ': ' + JSON.stringify(results));
+    writeActivityLog(
+      "eraseAllData",
+      { sheetsErased: SHEETS_TO_ERASE },
+      results,
+    );
+    Logger.log(
+      "[eraseAllData] DESTRUCTIVE OPERATION COMPLETED at " +
+        nowISTTimestamp() +
+        ": " +
+        JSON.stringify(results),
+    );
 
     return respond(true, { erased: results, timestamp: nowISTTimestamp() });
   });
@@ -435,19 +734,115 @@ function eraseAllData(payload) {
 // ----------------------------------------------------------------------------
 
 const SCHEMA_DEFINITIONS = {
-  CUSTOMERS: ['CustomerId', 'Name', 'DeliveryAddress', 'Phone', 'Status', 'Product', 'DailyQty', 'DeliveryDays', 'Balance', 'Version', 'IdempotencyKey', 'CreatedAt', 'UpdatedAt'],
-  DAILY_LOGS: ['LogId', 'CustomerId', 'Date', 'Product', 'Qty', 'Delivered', 'Note', 'CreatedAt', 'UpdatedAt'],
-  PAUSE_PERIODS: ['PauseId', 'CustomerId', 'StartDate', 'EndDate', 'Reason', 'CreatedAt'],
-  BILLS: ['BillId', 'CustomerId', 'Month', 'Amount', 'AmountPaid', 'Status', 'DueDate', 'Locked', 'StaleFlag', 'Version', 'CreatedAt', 'UpdatedAt'],
-  PAYMENTS: ['PaymentId', 'BillId', 'CustomerId', 'Amount', 'Mode', 'Date', 'Note', 'IdempotencyKey', 'CreatedAt'],
-  ADJUSTMENTS: ['AdjustmentId', 'CustomerId', 'Date', 'Amount', 'Reason', 'Applied', 'BillId', 'CreatedAt'],
-  MILK_IMPORTS: ['ImportId', 'Date', 'BrandName', 'MilkType', 'Quantity', 'RatePerLiter', 'TotalCost', 'Supplier', 'InvoiceNumber', 'Notes', 'Status', 'Version', 'IdempotencyKey', 'CreatedAt', 'UpdatedAt'],
-  MILK_BRANDS: ['BrandId', 'BrandName', 'SupplierName', 'SupplierPhone', 'DefaultMilkType', 'RatePerLiter', 'Status', 'CreatedAt'],
-  MILK_TYPES: ['TypeId', 'TypeName', 'Status'],
-  PRODUCTS: ['ProductId', 'ShortCode', 'Name', 'Category', 'Status', 'CreatedAt', 'UpdatedAt'],
-  SETTINGS: ['Key', 'Value'],
-  ACTIVITY_LOG: ['Timestamp', 'Action', 'PayloadSummary', 'ResultSummary'],
-  SYSTEM_STATE: ['Key', 'Value'],
+  CUSTOMERS: [
+    "CustomerId",
+    "Name",
+    "DeliveryAddress",
+    "Phone",
+    "Status",
+    "Product",
+    "DailyQty",
+    "DeliveryDays",
+    "Balance",
+    "Version",
+    "IdempotencyKey",
+    "CreatedAt",
+    "UpdatedAt",
+  ],
+  DAILY_LOGS: [
+    "LogId",
+    "CustomerId",
+    "Date",
+    "Product",
+    "Qty",
+    "Delivered",
+    "Note",
+    "CreatedAt",
+    "UpdatedAt",
+  ],
+  PAUSE_PERIODS: [
+    "PauseId",
+    "CustomerId",
+    "StartDate",
+    "EndDate",
+    "Reason",
+    "CreatedAt",
+  ],
+  BILLS: [
+    "BillId",
+    "CustomerId",
+    "Month",
+    "Amount",
+    "AmountPaid",
+    "Status",
+    "DueDate",
+    "Locked",
+    "StaleFlag",
+    "Version",
+    "CreatedAt",
+    "UpdatedAt",
+  ],
+  PAYMENTS: [
+    "PaymentId",
+    "BillId",
+    "CustomerId",
+    "Amount",
+    "Mode",
+    "Date",
+    "Note",
+    "IdempotencyKey",
+    "CreatedAt",
+  ],
+  ADJUSTMENTS: [
+    "AdjustmentId",
+    "CustomerId",
+    "Date",
+    "Amount",
+    "Reason",
+    "Applied",
+    "BillId",
+    "CreatedAt",
+  ],
+  MILK_IMPORTS: [
+    "ImportId",
+    "Date",
+    "BrandName",
+    "MilkType",
+    "Quantity",
+    "RatePerLiter",
+    "TotalCost",
+    "Supplier",
+    "InvoiceNumber",
+    "Notes",
+    "Status",
+    "Version",
+    "IdempotencyKey",
+    "CreatedAt",
+    "UpdatedAt",
+  ],
+  MILK_BRANDS: [
+    "BrandId",
+    "BrandName",
+    "SupplierName",
+    "SupplierPhone",
+    "DefaultMilkType",
+    "RatePerLiter",
+    "Status",
+    "CreatedAt",
+  ],
+  MILK_TYPES: ["TypeId", "TypeName", "Status"],
+  PRODUCTS: [
+    "ProductId",
+    "ShortCode",
+    "Name",
+    "Category",
+    "Status",
+    "CreatedAt",
+    "UpdatedAt",
+  ],
+  SETTINGS: ["Key", "Value"],
+  ACTIVITY_LOG: ["Timestamp", "Action", "PayloadSummary", "ResultSummary"],
+  SYSTEM_STATE: ["Key", "Value"],
 };
 
 /**
@@ -481,20 +876,29 @@ function setupSheets() {
   // make the missing types get rejected by isValidActiveMilkType() on import.
   const typesSheet = ss.getSheetByName(SHEET_NAMES.MILK_TYPES);
   if (typesSheet && typesSheet.getLastRow() < 2) {
-    ['Full Cream', 'Toned', 'Double Toned', 'Skimmed', 'Standardised'].forEach(function (typeName, i) {
-      typesSheet.getRange(i + 2, 1, 1, 3).setValues([['TYPE-' + (i + 1), typeName, 'Active']]);
-    });
+    ["Full Cream", "Toned", "Double Toned", "Skimmed", "Standardised"].forEach(
+      function (typeName, i) {
+        typesSheet
+          .getRange(i + 2, 1, 1, 3)
+          .setValues([["TYPE-" + (i + 1), typeName, "Active"]]);
+      },
+    );
   }
 
   // Seed SchemaVersion/APIVersion if Settings was just created
   const settingsSheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (settingsSheet && settingsSheet.getLastRow() < 2) {
     settingsSheet.getRange(2, 1, 2, 2).setValues([
-      ['SchemaVersion', String(CURRENT_SCHEMA_VERSION)],
-      ['APIVersion', String(CURRENT_API_VERSION)],
+      ["SchemaVersion", String(CURRENT_SCHEMA_VERSION)],
+      ["APIVersion", String(CURRENT_API_VERSION)],
     ]);
   }
 
-  Logger.log('setupSheets complete. Created: ' + (created.length ? created.join(', ') : '(none — all sheets already existed)'));
+  Logger.log(
+    "setupSheets complete. Created: " +
+      (created.length
+        ? created.join(", ")
+        : "(none — all sheets already existed)"),
+  );
   return { created: created };
 }

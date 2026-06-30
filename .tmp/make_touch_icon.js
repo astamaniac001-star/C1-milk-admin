@@ -4,16 +4,16 @@
 //   public/icon-512.png          (512x512) — PWA "any maskable" icon
 // Run once with `node .tmp/make_touch_icon.js` whenever the brand mark changes.
 
-import fs from 'fs';
-import zlib from 'zlib';
-import { Buffer } from 'buffer';
+import fs from "fs";
+import zlib from "zlib";
+import { Buffer } from "buffer";
 
 function crc32(buf) {
   let c = 0xffffffff;
   for (let i = 0; i < buf.length; i++) {
     c ^= buf[i];
     for (let j = 0; j < 8; j++) {
-      c = (c & 1) ? (c >>> 1) ^ 0xedb88320 : c >>> 1;
+      c = c & 1 ? (c >>> 1) ^ 0xedb88320 : c >>> 1;
     }
   }
   return (c ^ 0xffffffff) >>> 0;
@@ -43,7 +43,7 @@ function createPng(width, height) {
     for (let x = 0; x < width; x++) {
       const dx = x - width / 2;
       const dy = y - height / 2;
-      const inside = dx * dx + dy * dy <= (width * 0.38) * (width * 0.38);
+      const inside = dx * dx + dy * dy <= width * 0.38 * (width * 0.38);
       const [r, g, b, a] = inside ? [255, 255, 255, 255] : [30, 64, 175, 255];
       pixels[offset++] = r;
       pixels[offset++] = g;
@@ -55,12 +55,14 @@ function createPng(width, height) {
   const compressed = zlib.deflateSync(pixels);
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), // PNG signature
-    chunk('IHDR', ihdr),
-    chunk('IDAT', compressed),
-    chunk('IEND', Buffer.alloc(0)),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", compressed),
+    chunk("IEND", Buffer.alloc(0)),
   ]);
 }
 
-fs.writeFileSync('public/apple-touch-icon.png', createPng(180, 180));
-fs.writeFileSync('public/icon-512.png', createPng(512, 512));
-console.log('wrote public/apple-touch-icon.png (180x180) and public/icon-512.png (512x512)');
+fs.writeFileSync("public/apple-touch-icon.png", createPng(180, 180));
+fs.writeFileSync("public/icon-512.png", createPng(512, 512));
+console.log(
+  "wrote public/apple-touch-icon.png (180x180) and public/icon-512.png (512x512)",
+);

@@ -2,9 +2,27 @@ import { describe, it, expect } from "vitest";
 import { filterCustomers, filterImports, filterBills } from "./filters.js";
 
 const customers = [
-  { id: "C1", name: "Ramesh Sharma", address: "14 Shivaji Nagar", phone: "9876543210", status: "Active" },
-  { id: "C2", name: "Priya Patel", address: "22 MG Road", phone: "9123456789", status: "Inactive" },
-  { id: "C3", name: "Amit Kumar", address: "Shivaji Colony", phone: "9988776655", status: "Paused" },
+  {
+    id: "C1",
+    name: "Ramesh Sharma",
+    address: "14 Shivaji Nagar",
+    phone: "9876543210",
+    status: "Active",
+  },
+  {
+    id: "C2",
+    name: "Priya Patel",
+    address: "22 MG Road",
+    phone: "9123456789",
+    status: "Inactive",
+  },
+  {
+    id: "C3",
+    name: "Amit Kumar",
+    address: "Shivaji Colony",
+    phone: "9988776655",
+    status: "Paused",
+  },
 ];
 
 const imports = [
@@ -26,15 +44,21 @@ describe("filterCustomers", () => {
 
   it("matches name, address, or phone case-insensitively", () => {
     expect(filterCustomers(customers, "ramesh", "All")).toEqual([customers[0]]);
-    expect(filterCustomers(customers, "mg road", "All")).toEqual([customers[1]]);
-    expect(filterCustomers(customers, "9876543210", "All")).toEqual([customers[0]]);
+    expect(filterCustomers(customers, "mg road", "All")).toEqual([
+      customers[1],
+    ]);
+    expect(filterCustomers(customers, "9876543210", "All")).toEqual([
+      customers[0],
+    ]);
     expect(filterCustomers(customers, "shivaji", "All")).toHaveLength(2);
   });
 
   it("filters by status when not All", () => {
     expect(filterCustomers(customers, "", "Active")).toEqual([customers[0]]);
     expect(filterCustomers(customers, "", "Inactive")).toEqual([customers[1]]);
-    expect(filterCustomers(customers, "shivaji", "Paused")).toEqual([customers[2]]);
+    expect(filterCustomers(customers, "shivaji", "Paused")).toEqual([
+      customers[2],
+    ]);
   });
 
   it("returns empty when search and status do not match together", () => {
@@ -44,15 +68,28 @@ describe("filterCustomers", () => {
 
 describe("filterImports", () => {
   it("returns all imports when every filter is empty", () => {
-    expect(filterImports(imports, { month: "", brand: "", status: "" })).toHaveLength(3);
+    expect(
+      filterImports(imports, { month: "", brand: "", status: "" }),
+    ).toHaveLength(3);
   });
 
   it("filters by brand, status, and month prefix independently", () => {
-    expect(filterImports(imports, { month: "", brand: "Amul", status: "" })).toHaveLength(2);
-    expect(filterImports(imports, { month: "", brand: "", status: "Confirmed" })).toHaveLength(2);
-    expect(filterImports(imports, { month: "2025-01", brand: "", status: "" })).toHaveLength(2);
-    expect(filterImports(imports, { month: "2025-01", brand: "Amul", status: "Confirmed" }))
-      .toEqual([imports[2]]);
+    expect(
+      filterImports(imports, { month: "", brand: "Amul", status: "" }),
+    ).toHaveLength(2);
+    expect(
+      filterImports(imports, { month: "", brand: "", status: "Confirmed" }),
+    ).toHaveLength(2);
+    expect(
+      filterImports(imports, { month: "2025-01", brand: "", status: "" }),
+    ).toHaveLength(2);
+    expect(
+      filterImports(imports, {
+        month: "2025-01",
+        brand: "Amul",
+        status: "Confirmed",
+      }),
+    ).toEqual([imports[2]]);
   });
 });
 

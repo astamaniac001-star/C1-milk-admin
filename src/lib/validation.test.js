@@ -9,34 +9,48 @@ import {
 
 describe("validateCustomerForm", () => {
   it("returns null for valid input", () => {
-    expect(validateCustomerForm({
-      name: "Ramesh Sharma",
-      address: "14 Shivaji Nagar",
-      phone: "9876543210",
-    })).toBeNull();
+    expect(
+      validateCustomerForm({
+        name: "Ramesh Sharma",
+        address: "14 Shivaji Nagar",
+        phone: "9876543210",
+      }),
+    ).toBeNull();
   });
 
   it("allows empty phone", () => {
-    expect(validateCustomerForm({ name: "Ramesh", address: "14 Lane" })).toBeNull();
+    expect(
+      validateCustomerForm({ name: "Ramesh", address: "14 Lane" }),
+    ).toBeNull();
   });
 
   it("rejects missing name or address", () => {
-    expect(validateCustomerForm({ name: "  ", address: "14 Lane" })).toBe("Name is required");
-    expect(validateCustomerForm({ name: "Ramesh", address: "" })).toBe("Address is required");
+    expect(validateCustomerForm({ name: "  ", address: "14 Lane" })).toBe(
+      "Name is required",
+    );
+    expect(validateCustomerForm({ name: "Ramesh", address: "" })).toBe(
+      "Address is required",
+    );
   });
 
   it("rejects invalid phone after stripping non-digits", () => {
-    expect(validateCustomerForm({
-      name: "Ramesh",
-      address: "14 Lane",
-      phone: "98765-432",
-    })).toBe("Enter valid 10-digit phone");
+    expect(
+      validateCustomerForm({
+        name: "Ramesh",
+        address: "14 Lane",
+        phone: "98765-432",
+      }),
+    ).toBe("Enter valid 10-digit phone");
   });
 });
 
 describe("buildNewCustomer", () => {
   it("assigns defaults for new customers", () => {
-    const customer = buildNewCustomer({ name: "Ramesh", address: "14 Lane", qty: "2" });
+    const customer = buildNewCustomer({
+      name: "Ramesh",
+      address: "14 Lane",
+      qty: "2",
+    });
 
     expect(customer.id).toMatch(/^C/);
     expect(customer.status).toBe("Active");
@@ -48,25 +62,41 @@ describe("buildNewCustomer", () => {
   });
 
   it("preserves provided product", () => {
-    expect(buildNewCustomer({ name: "A", address: "B", product: "Toned" }).product).toBe("Toned");
+    expect(
+      buildNewCustomer({ name: "A", address: "B", product: "Toned" }).product,
+    ).toBe("Toned");
   });
 });
 
 describe("validateImportForm", () => {
-  const valid = { date: "2025-01-15", brand: "Amul", type: "Full Cream", qty: 100, rate: 36 };
+  const valid = {
+    date: "2025-01-15",
+    brand: "Amul",
+    type: "Full Cream",
+    qty: 100,
+    rate: 36,
+  };
 
   it("returns null for valid import", () => {
     expect(validateImportForm(valid)).toBeNull();
   });
 
   it("rejects missing required fields", () => {
-    expect(validateImportForm({ brand: "Amul", type: "Full Cream", qty: 1, rate: 1 }))
-      .toBe("Fill required fields");
+    expect(
+      validateImportForm({
+        brand: "Amul",
+        type: "Full Cream",
+        qty: 1,
+        rate: 1,
+      }),
+    ).toBe("Fill required fields");
   });
 
   it("rejects invalid quantity and rate", () => {
     expect(validateImportForm({ ...valid, qty: 0 })).toBe("Invalid quantity");
-    expect(validateImportForm({ ...valid, qty: 10000 })).toBe("Invalid quantity");
+    expect(validateImportForm({ ...valid, qty: 10000 })).toBe(
+      "Invalid quantity",
+    );
     expect(validateImportForm({ ...valid, rate: 0 })).toBe("Invalid rate");
   });
 });

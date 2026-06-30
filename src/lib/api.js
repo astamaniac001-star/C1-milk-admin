@@ -1,22 +1,132 @@
-
 // src/lib/api.js
+
+// --- RESPONSE MAPPERS (Backend -> Frontend) ---
+
 export function mapCustomerFromApi(c) {
   return {
-    id: c.customerId, name: c.name, address: c.deliveryAddress,
-    phone: c.phone, status: c.status, product: c.product,
-    qty: c.dailyQty, deliveryDays: c.deliveryDays, balance: c.balance, version: c.version,
+    id: c.customerId,
+    name: c.name,
+    address: c.deliveryAddress,
+    phone: c.phone,
+    status: c.status,
+    product: c.product,
+    qty: c.dailyQty,
+    deliveryDays: c.deliveryDays,
+    balance: c.balance,
+    version: c.version,
   };
 }
+
+export function mapBillFromApi(b) {
+  return {
+    id: b.billId,
+    custId: b.customerId,
+    month: b.month,
+    amount: b.amount,
+    paid: b.amountPaid,
+    due: b.dueDate,
+    status: b.status,
+    version: b.version,
+  };
+}
+
+export function mapImportFromApi(i) {
+  return {
+    id: i.importId,
+    brand: i.brandName,
+    type: i.milkType,
+    qty: i.quantity,
+    rate: i.ratePerLiter,
+    total: i.totalCost,
+    invoice: i.invoiceNumber,
+    supplier: i.supplierName,
+    date: i.date,
+    status: i.status,
+  };
+}
+
+export function mapLogFromApi(l) {
+  return {
+    id: l.logId,
+    custId: l.customerId,
+    date: l.date,
+    delivered: l.delivered,
+    status: l.status,
+  };
+}
+
+export function mapAdjustmentFromApi(a) {
+  return {
+    id: a.adjustmentId,
+    billId: a.billId,
+    reason: a.reason,
+    amount: a.amount,
+    date: a.date,
+  };
+}
+
+export function mapPauseFromApi(p) {
+  return {
+    id: p.pauseId,
+    custId: p.customerId,
+    start: p.startDate,
+    end: p.endDate,
+    reason: p.reason,
+  };
+}
+
+export function mapBrandFromApi(b) {
+  return {
+    id: b.brandId,
+    name: b.brandName,
+    status: b.status,
+  };
+}
+
+// --- REQUEST MAPPERS (Frontend -> Backend) ---
+
+// Safe ID generation: completely avoids crypto.randomUUID issues in jsdom/test environments
+const generateKey = () =>
+  `${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
 
 export function mapCustomerToApi(form) {
   return {
-    customerId: form.id || undefined, 
-    expectedVersion: form.version, 
-    name: form.name, deliveryAddress: form.address, phone: form.phone,
-    product: form.product, dailyQty: form.qty, deliveryDays: form.deliveryDays, status: form.status,
-    // FIX B5: Removed idempotencyKey generation to prevent duplication
+    customerId: form.id || undefined,
+    expectedVersion: form.version,
+    name: form.name,
+    deliveryAddress: form.address,
+    phone: form.phone,
+    product: form.product,
+    dailyQty: form.qty,
+    deliveryDays: form.deliveryDays,
+    status: form.status,
+    idempotencyKey: form.id ? undefined : generateKey(),
   };
 }
+
+export function mapImportToApi(form) {
+  return {
+    brandName: form.brand,
+    milkType: form.type,
+    quantity: Number(form.qty),
+    ratePerLiter: Number(form.rate),
+    totalCost: Number(form.total),
+    invoiceNumber: form.invoice,
+    supplierName: form.supplier,
+    date: form.date,
+    idempotencyKey: generateKey(),
+  };
+}
+
+export function mapPaymentToApi(billId, amount) {
+  return {
+    billId,
+    amountPaid: Number(amount),
+    idempotencyKey: generateKey(),
+  };
+}
+
+// --- API CLIENT ---
 
 export async function callApi(action, payload = {}) {
   const token = localStorage.getItem("token");
@@ -32,20 +142,24 @@ export async function callApi(action, payload = {}) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    
+
     const result = await response.json();
-    
+
     if (!result.success) {
-      // FIX B3: 401 Interceptor. If backend rejects token, force logout.
+      // 401 Interceptor: If backend rejects token, force logout.
       const errorCode = result.error?.code;
-      if (errorCode === 'UNAUTHORIZED' || errorCode === 'SESSION_EXPIRED' || errorCode === 'INVALID_TOKEN') {
+      if (
+        errorCode === "UNAUTHORIZED" ||
+        errorCode === "SESSION_EXPIRED" ||
+        errorCode === "INVALID_TOKEN"
+      ) {
         localStorage.removeItem("token");
         localStorage.removeItem("sessionSecret");
-        window.location.reload(); 
+        window.location.reload();
       }
       throw new Error(result.error?.message || "Unknown API error");
     }
-    
+
     return result.data;
   } catch (err) {
     console.error(`Network Error [${action}]:`, err);

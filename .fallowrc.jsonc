@@ -13,12 +13,12 @@
   //                              in public/app.js
   //   netlify/functions/proxy.js — a Netlify Function, reached via the
   //                              netlify.toml redirect /api -> proxy
-    "entry": [
+  "entry": [
     "public/sw.js",
     "netlify/functions/proxy.js",
-    "netlify/tests/proxy-test.js" // <-- ADD THIS LINE
+    "netlify/tests/proxy-test.js", // <-- ADD THIS LINE
   ],
   "duplicates": {
-    "ignore": ["dup:c53e2f4f"]
-  }
+    "ignore": ["dup:c53e2f4f"],
+  },
 }

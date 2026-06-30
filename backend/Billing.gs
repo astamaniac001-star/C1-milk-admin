@@ -1,5 +1,3 @@
-
-
 /**
  * ============================================================================
  * MILK DELIVERY ADMIN — V17 BACKEND
@@ -28,8 +26,16 @@
  * ============================================================================
  */
 
-const PAYMENT_MODES = ['Cash', 'UPI', 'PhonePe', 'GPay', 'Paytm', 'Bank Transfer', 'Cheque'];
-const BILL_STATUSES = ['Unpaid', 'Partial', 'Paid'];
+const PAYMENT_MODES = [
+  "Cash",
+  "UPI",
+  "PhonePe",
+  "GPay",
+  "Paytm",
+  "Bank Transfer",
+  "Cheque",
+];
+const BILL_STATUSES = ["Unpaid", "Partial", "Paid"];
 const RATE_PER_LITER_DEFAULT = 32; // fallback if no MilkType-specific rate is configured
 
 function round2(n) {
@@ -42,28 +48,36 @@ function round2(n) {
 
 function validatePaymentPayload(payload) {
   const errors = [];
-  if (!payload.billId) errors.push('billId is required');
-  if (payload.amount === undefined || payload.amount === null) errors.push('amount is required');
+  if (!payload.billId) errors.push("billId is required");
+  if (payload.amount === undefined || payload.amount === null)
+    errors.push("amount is required");
   else {
     const amt = Number(payload.amount);
-    if (isNaN(amt) || amt <= 0) errors.push('amount must be a positive number');
-    else if (amt > 1000000) errors.push('amount exceeds maximum allowed (₹10,00,000)');
+    if (isNaN(amt) || amt <= 0) errors.push("amount must be a positive number");
+    else if (amt > 1000000)
+      errors.push("amount exceeds maximum allowed (₹10,00,000)");
   }
-  if (!payload.mode) errors.push('mode is required');
-  else if (PAYMENT_MODES.indexOf(payload.mode) === -1) errors.push('Invalid payment mode: ' + payload.mode);
-  if (!payload.idempotencyKey) errors.push('idempotencyKey is required');
+  if (!payload.mode) errors.push("mode is required");
+  else if (PAYMENT_MODES.indexOf(payload.mode) === -1)
+    errors.push("Invalid payment mode: " + payload.mode);
+  if (!payload.idempotencyKey) errors.push("idempotencyKey is required");
   return { valid: errors.length === 0, errors };
 }
 
 function validateAdjustmentPayload(payload) {
   const errors = [];
-  if (!payload.customerId) errors.push('customerId is required');
-  if (payload.amount === undefined || payload.amount === null || Number(payload.amount) === 0) {
-    errors.push('amount is required and must be non-zero');
+  if (!payload.customerId) errors.push("customerId is required");
+  if (
+    payload.amount === undefined ||
+    payload.amount === null ||
+    Number(payload.amount) === 0
+  ) {
+    errors.push("amount is required and must be non-zero");
   } else if (Math.abs(Number(payload.amount)) > 100000) {
-    errors.push('amount exceeds maximum allowed (₹1,00,000)');
+    errors.push("amount exceeds maximum allowed (₹1,00,000)");
   }
-  if (!payload.reason || !String(payload.reason).trim()) errors.push('reason is required');
+  if (!payload.reason || !String(payload.reason).trim())
+    errors.push("reason is required");
   return { valid: errors.length === 0, errors };
 }
 
@@ -76,9 +90,9 @@ function deriveStatus(amount, amountPaid, billLifecycleState) {
   // (e.g. 'Disputed', 'WrittenOff') without changing the call signature.
   const a = round2(amount);
   const p = round2(amountPaid);
-  if (p <= 0) return 'Unpaid';
-  if (p >= a) return 'Paid';
-  return 'Partial';
+  if (p <= 0) return "Unpaid";
+  if (p >= a) return "Paid";
+  return "Partial";
 }
 
 // ----------------------------------------------------------------------------
@@ -92,39 +106,67 @@ function deriveStatus(amount, amountPaid, billLifecycleState) {
  * Required: customerId, month (YYYY-MM)
  */
 function generateMonthBill(payload) {
-  if (!payload.customerId) return respond(false, null, { code: 'VALIDATION_ERROR', message: 'customerId is required' });
+  if (!payload.customerId)
+    return respond(false, null, {
+      code: "VALIDATION_ERROR",
+      message: "customerId is required",
+    });
   if (!payload.month || !/^\d{4}-\d{2}$/.test(payload.month)) {
-    return respond(false, null, { code: 'VALIDATION_ERROR', message: 'month must be YYYY-MM' });
+    return respond(false, null, {
+      code: "VALIDATION_ERROR",
+      message: "month must be YYYY-MM",
+    });
   }
 
   return withLock(function () {
-    const billSheet = getSheet('BILLS');
+    const billSheet = getSheet("BILLS");
     const billHdr = buildHeaderMap(billSheet);
 
     // Prevent duplicate bill for same customer+month
-    const existing = findRowByTwoColumns(billSheet, billHdr, 'CustomerId', payload.customerId, 'Month', payload.month);
+    const existing = findRowByTwoColumns(
+      billSheet,
+      billHdr,
+      "CustomerId",
+      payload.customerId,
+      "Month",
+      payload.month,
+    );
     if (existing) {
-      return respond(false, null, { code: 'CONFLICT', message: 'Bill already exists for this customer and month', billId: existing.rowValues[billHdr['BillId']] });
+      return respond(false, null, {
+        code: "CONFLICT",
+        message: "Bill already exists for this customer and month",
+        billId: existing.rowValues[billHdr["BillId"]],
+      });
     }
 
-    const custSheet = getSheet('CUSTOMERS');
+    const custSheet = getSheet("CUSTOMERS");
     const custHdr = buildHeaderMap(custSheet);
-    const custRow = findRowById(custSheet, custHdr['CustomerId'], payload.customerId);
-    if (!custRow) return respond(false, null, { code: 'NOT_FOUND', message: 'Customer not found' });
+    const custRow = findRowById(
+      custSheet,
+      custHdr["CustomerId"],
+      payload.customerId,
+    );
+    if (!custRow)
+      return respond(false, null, {
+        code: "NOT_FOUND",
+        message: "Customer not found",
+      });
 
     // Sum delivered quantity for the month from DailyLogs
-    const logSheet = getSheet('DAILY_LOGS');
+    const logSheet = getSheet("DAILY_LOGS");
     const logHdr = buildHeaderMap(logSheet);
     const logLastRow = logSheet.getLastRow();
     let totalQty = 0;
 
     if (logLastRow >= 2) {
-      const logs = logSheet.getRange(2, 1, logLastRow - 1, logSheet.getLastColumn()).getValues();
-      logs.forEach(row => {
-        if (row[logHdr['CustomerId']] !== payload.customerId) return;
-        if (!String(row[logHdr['Date']]).startsWith(payload.month)) return;
-        if (!row[logHdr['Delivered']]) return;
-        totalQty += Number(row[logHdr['Qty']]) || 0;
+      const logs = logSheet
+        .getRange(2, 1, logLastRow - 1, logSheet.getLastColumn())
+        .getValues();
+      logs.forEach((row) => {
+        if (row[logHdr["CustomerId"]] !== payload.customerId) return;
+        if (!String(row[logHdr["Date"]]).startsWith(payload.month)) return;
+        if (!row[logHdr["Delivered"]]) return;
+        totalQty += Number(row[logHdr["Qty"]]) || 0;
       });
     }
 
@@ -132,52 +174,71 @@ function generateMonthBill(payload) {
     let amount = round2(totalQty * rate);
 
     // Apply any *already-applied* adjustments for this customer dated in this month
-    const adjSheet = getSheet('ADJUSTMENTS');
+    const adjSheet = getSheet("ADJUSTMENTS");
     const adjHdr = buildHeaderMap(adjSheet);
     const adjLastRow = adjSheet.getLastRow();
     if (adjLastRow >= 2) {
-      const adjustments = adjSheet.getRange(2, 1, adjLastRow - 1, adjSheet.getLastColumn()).getValues();
-      adjustments.forEach(row => {
-        if (row[adjHdr['CustomerId']] !== payload.customerId) return;
-        if (!String(row[adjHdr['Date']]).startsWith(payload.month)) return;
-        if (!row[adjHdr['Applied']]) return;
-        amount = round2(amount + Number(row[adjHdr['Amount']]));
+      const adjustments = adjSheet
+        .getRange(2, 1, adjLastRow - 1, adjSheet.getLastColumn())
+        .getValues();
+      adjustments.forEach((row) => {
+        if (row[adjHdr["CustomerId"]] !== payload.customerId) return;
+        if (!String(row[adjHdr["Date"]]).startsWith(payload.month)) return;
+        if (!row[adjHdr["Applied"]]) return;
+        amount = round2(amount + Number(row[adjHdr["Amount"]]));
       });
     }
 
     if (amount < 0) amount = 0; // a bill can't be negative; credit carries forward via Balance, not handled here
 
-    const billId = 'BILL-' + Utilities.getUuid().substring(0, 8).toUpperCase();
-    const now = Utilities.formatDate(new Date(), 'Asia/Kolkata', "yyyy-MM-dd'T'HH:mm:ssXXX");
+    const billId = "BILL-" + Utilities.getUuid().substring(0, 8).toUpperCase();
+    const now = Utilities.formatDate(
+      new Date(),
+      "Asia/Kolkata",
+      "yyyy-MM-dd'T'HH:mm:ssXXX",
+    );
     const dueDate = computeDueDate(payload.month);
 
     const row = [];
-    row[billHdr['BillId']] = billId;
-    row[billHdr['CustomerId']] = payload.customerId;
-    row[billHdr['Month']] = payload.month;
-    row[billHdr['Amount']] = amount;
-    row[billHdr['AmountPaid']] = 0;
-    row[billHdr['Status']] = deriveStatus(amount, 0, 'Generated');
-    row[billHdr['DueDate']] = dueDate;
-    row[billHdr['Locked']] = false;
-    row[billHdr['StaleFlag']] = false;
-    row[billHdr['Version']] = 1;
-    row[billHdr['CreatedAt']] = now;
-    row[billHdr['UpdatedAt']] = now;
+    row[billHdr["BillId"]] = billId;
+    row[billHdr["CustomerId"]] = payload.customerId;
+    row[billHdr["Month"]] = payload.month;
+    row[billHdr["Amount"]] = amount;
+    row[billHdr["AmountPaid"]] = 0;
+    row[billHdr["Status"]] = deriveStatus(amount, 0, "Generated");
+    row[billHdr["DueDate"]] = dueDate;
+    row[billHdr["Locked"]] = false;
+    row[billHdr["StaleFlag"]] = false;
+    row[billHdr["Version"]] = 1;
+    row[billHdr["CreatedAt"]] = now;
+    row[billHdr["UpdatedAt"]] = now;
 
     safeAppend(billSheet, row);
-    writeActivityLog('generateMonthBill', payload, { billId: billId, amount: amount, totalQty: totalQty });
+    writeActivityLog("generateMonthBill", payload, {
+      billId: billId,
+      amount: amount,
+      totalQty: totalQty,
+    });
 
-    return respond(true, { billId: billId, amount: amount, totalQty: totalQty, dueDate: dueDate });
+    return respond(true, {
+      billId: billId,
+      amount: amount,
+      totalQty: totalQty,
+      dueDate: dueDate,
+    });
   });
 }
 
 function computeDueDate(month) {
   // Due 5th of the following month
-  const parts = month.split('-');
-  let y = Number(parts[0]), m = Number(parts[1]) + 1;
-  if (m > 12) { m = 1; y += 1; }
-  return y + '-' + String(m).padStart(2, '0') + '-05';
+  const parts = month.split("-");
+  let y = Number(parts[0]),
+    m = Number(parts[1]) + 1;
+  if (m > 12) {
+    m = 1;
+    y += 1;
+  }
+  return y + "-" + String(m).padStart(2, "0") + "-05";
 }
 
 // ----------------------------------------------------------------------------
@@ -189,39 +250,80 @@ function computeDueDate(month) {
  * path, separate from adjustments). Required: billId, expectedVersion, amount
  */
 function updateBill(payload) {
-  if (!payload.billId) return respond(false, null, { code: 'VALIDATION_ERROR', message: 'billId is required' });
-  if (payload.expectedVersion === undefined) return respond(false, null, { code: 'VALIDATION_ERROR', message: 'expectedVersion is required' });
-  if (payload.amount === undefined || isNaN(Number(payload.amount)) || Number(payload.amount) < 0) {
-    return respond(false, null, { code: 'VALIDATION_ERROR', message: 'Valid amount is required' });
+  if (!payload.billId)
+    return respond(false, null, {
+      code: "VALIDATION_ERROR",
+      message: "billId is required",
+    });
+  if (payload.expectedVersion === undefined)
+    return respond(false, null, {
+      code: "VALIDATION_ERROR",
+      message: "expectedVersion is required",
+    });
+  if (
+    payload.amount === undefined ||
+    isNaN(Number(payload.amount)) ||
+    Number(payload.amount) < 0
+  ) {
+    return respond(false, null, {
+      code: "VALIDATION_ERROR",
+      message: "Valid amount is required",
+    });
   }
 
   return withLock(function () {
-    const sheet = getSheet('BILLS');
+    const sheet = getSheet("BILLS");
     const hdr = buildHeaderMap(sheet);
-    const found = findRowById(sheet, hdr['BillId'], payload.billId);
-    if (!found) return respond(false, null, { code: 'NOT_FOUND', message: 'Bill not found' });
+    const found = findRowById(sheet, hdr["BillId"], payload.billId);
+    if (!found)
+      return respond(false, null, {
+        code: "NOT_FOUND",
+        message: "Bill not found",
+      });
 
-    if (found.rowValues[hdr['Locked']] === true) {
-      return respond(false, null, { code: 'BILL_LOCKED', message: 'Cannot modify a locked bill' });
+    if (found.rowValues[hdr["Locked"]] === true) {
+      return respond(false, null, {
+        code: "BILL_LOCKED",
+        message: "Cannot modify a locked bill",
+      });
     }
 
-    const currentVersion = Number(found.rowValues[hdr['Version']]);
+    const currentVersion = Number(found.rowValues[hdr["Version"]]);
     if (currentVersion !== Number(payload.expectedVersion)) {
-      return respond(false, null, { code: 'VERSION_CONFLICT', message: 'Bill was modified by another process', currentVersion: currentVersion });
+      return respond(false, null, {
+        code: "VERSION_CONFLICT",
+        message: "Bill was modified by another process",
+        currentVersion: currentVersion,
+      });
     }
 
     const newAmount = round2(payload.amount);
-    const amountPaid = Number(found.rowValues[hdr['AmountPaid']]);
-    const now = Utilities.formatDate(new Date(), 'Asia/Kolkata', "yyyy-MM-dd'T'HH:mm:ssXXX");
+    const amountPaid = Number(found.rowValues[hdr["AmountPaid"]]);
+    const now = Utilities.formatDate(
+      new Date(),
+      "Asia/Kolkata",
+      "yyyy-MM-dd'T'HH:mm:ssXXX",
+    );
 
-    sheet.getRange(found.rowIndex, hdr['Amount'] + 1).setValue(newAmount);
-    sheet.getRange(found.rowIndex, hdr['Status'] + 1).setValue(deriveStatus(newAmount, amountPaid, 'Updated'));
-    sheet.getRange(found.rowIndex, hdr['StaleFlag'] + 1).setValue(false);
-    sheet.getRange(found.rowIndex, hdr['Version'] + 1).setValue(currentVersion + 1);
-    sheet.getRange(found.rowIndex, hdr['UpdatedAt'] + 1).setValue(now);
+    sheet.getRange(found.rowIndex, hdr["Amount"] + 1).setValue(newAmount);
+    sheet
+      .getRange(found.rowIndex, hdr["Status"] + 1)
+      .setValue(deriveStatus(newAmount, amountPaid, "Updated"));
+    sheet.getRange(found.rowIndex, hdr["StaleFlag"] + 1).setValue(false);
+    sheet
+      .getRange(found.rowIndex, hdr["Version"] + 1)
+      .setValue(currentVersion + 1);
+    sheet.getRange(found.rowIndex, hdr["UpdatedAt"] + 1).setValue(now);
 
-    writeActivityLog('updateBill', payload, { billId: payload.billId, newAmount: newAmount });
-    return respond(true, { billId: payload.billId, newVersion: currentVersion + 1, newAmount: newAmount });
+    writeActivityLog("updateBill", payload, {
+      billId: payload.billId,
+      newAmount: newAmount,
+    });
+    return respond(true, {
+      billId: payload.billId,
+      newVersion: currentVersion + 1,
+      newAmount: newAmount,
+    });
   });
 }
 
@@ -230,20 +332,34 @@ function updateBill(payload) {
  * Distinct from "Locked", which additionally blocks edits and payments.
  */
 function finalizeBill(payload) {
-  if (!payload.billId) return respond(false, null, { code: 'VALIDATION_ERROR', message: 'billId is required' });
+  if (!payload.billId)
+    return respond(false, null, {
+      code: "VALIDATION_ERROR",
+      message: "billId is required",
+    });
 
   return withLock(function () {
-    const sheet = getSheet('BILLS');
+    const sheet = getSheet("BILLS");
     const hdr = buildHeaderMap(sheet);
-    const found = findRowById(sheet, hdr['BillId'], payload.billId);
-    if (!found) return respond(false, null, { code: 'NOT_FOUND', message: 'Bill not found' });
+    const found = findRowById(sheet, hdr["BillId"], payload.billId);
+    if (!found)
+      return respond(false, null, {
+        code: "NOT_FOUND",
+        message: "Bill not found",
+      });
 
-    const now = Utilities.formatDate(new Date(), 'Asia/Kolkata', "yyyy-MM-dd'T'HH:mm:ssXXX");
-    sheet.getRange(found.rowIndex, hdr['StaleFlag'] + 1).setValue(false);
-    sheet.getRange(found.rowIndex, hdr['Version'] + 1).setValue(Number(found.rowValues[hdr['Version']]) + 1);
-    sheet.getRange(found.rowIndex, hdr['UpdatedAt'] + 1).setValue(now);
+    const now = Utilities.formatDate(
+      new Date(),
+      "Asia/Kolkata",
+      "yyyy-MM-dd'T'HH:mm:ssXXX",
+    );
+    sheet.getRange(found.rowIndex, hdr["StaleFlag"] + 1).setValue(false);
+    sheet
+      .getRange(found.rowIndex, hdr["Version"] + 1)
+      .setValue(Number(found.rowValues[hdr["Version"]]) + 1);
+    sheet.getRange(found.rowIndex, hdr["UpdatedAt"] + 1).setValue(now);
 
-    writeActivityLog('finalizeBill', payload, { billId: payload.billId });
+    writeActivityLog("finalizeBill", payload, { billId: payload.billId });
     return respond(true, { billId: payload.billId });
   });
 }
@@ -253,24 +369,41 @@ function finalizeBill(payload) {
  * Typically called once a bill is confirmed fully settled or archived.
  */
 function lockBill(payload) {
-  if (!payload.billId) return respond(false, null, { code: 'VALIDATION_ERROR', message: 'billId is required' });
+  if (!payload.billId)
+    return respond(false, null, {
+      code: "VALIDATION_ERROR",
+      message: "billId is required",
+    });
 
   return withLock(function () {
-    const sheet = getSheet('BILLS');
+    const sheet = getSheet("BILLS");
     const hdr = buildHeaderMap(sheet);
-    const found = findRowById(sheet, hdr['BillId'], payload.billId);
-    if (!found) return respond(false, null, { code: 'NOT_FOUND', message: 'Bill not found' });
+    const found = findRowById(sheet, hdr["BillId"], payload.billId);
+    if (!found)
+      return respond(false, null, {
+        code: "NOT_FOUND",
+        message: "Bill not found",
+      });
 
-    if (found.rowValues[hdr['Locked']] === true) {
-      return respond(false, null, { code: 'ALREADY_LOCKED', message: 'Bill is already locked' });
+    if (found.rowValues[hdr["Locked"]] === true) {
+      return respond(false, null, {
+        code: "ALREADY_LOCKED",
+        message: "Bill is already locked",
+      });
     }
 
-    const now = Utilities.formatDate(new Date(), 'Asia/Kolkata', "yyyy-MM-dd'T'HH:mm:ssXXX");
-    sheet.getRange(found.rowIndex, hdr['Locked'] + 1).setValue(true);
-    sheet.getRange(found.rowIndex, hdr['Version'] + 1).setValue(Number(found.rowValues[hdr['Version']]) + 1);
-    sheet.getRange(found.rowIndex, hdr['UpdatedAt'] + 1).setValue(now);
+    const now = Utilities.formatDate(
+      new Date(),
+      "Asia/Kolkata",
+      "yyyy-MM-dd'T'HH:mm:ssXXX",
+    );
+    sheet.getRange(found.rowIndex, hdr["Locked"] + 1).setValue(true);
+    sheet
+      .getRange(found.rowIndex, hdr["Version"] + 1)
+      .setValue(Number(found.rowValues[hdr["Version"]]) + 1);
+    sheet.getRange(found.rowIndex, hdr["UpdatedAt"] + 1).setValue(now);
 
-    writeActivityLog('lockBill', payload, { billId: payload.billId });
+    writeActivityLog("lockBill", payload, { billId: payload.billId });
     return respond(true, { billId: payload.billId });
   });
 }
@@ -281,20 +414,34 @@ function lockBill(payload) {
  * cleanly here with no shortcuts — every variable used is declared above.
  */
 function unlockBill(payload) {
-  if (!payload.billId) return respond(false, null, { code: 'VALIDATION_ERROR', message: 'billId is required' });
+  if (!payload.billId)
+    return respond(false, null, {
+      code: "VALIDATION_ERROR",
+      message: "billId is required",
+    });
 
   return withLock(function () {
-    const sheet = getSheet('BILLS');
+    const sheet = getSheet("BILLS");
     const hdr = buildHeaderMap(sheet);
-    const found = findRowById(sheet, hdr['BillId'], payload.billId);
-    if (!found) return respond(false, null, { code: 'NOT_FOUND', message: 'Bill not found' });
+    const found = findRowById(sheet, hdr["BillId"], payload.billId);
+    if (!found)
+      return respond(false, null, {
+        code: "NOT_FOUND",
+        message: "Bill not found",
+      });
 
-    const now = Utilities.formatDate(new Date(), 'Asia/Kolkata', "yyyy-MM-dd'T'HH:mm:ssXXX");
-    sheet.getRange(found.rowIndex, hdr['Locked'] + 1).setValue(false);
-    sheet.getRange(found.rowIndex, hdr['Version'] + 1).setValue(Number(found.rowValues[hdr['Version']]) + 1);
-    sheet.getRange(found.rowIndex, hdr['UpdatedAt'] + 1).setValue(now);
+    const now = Utilities.formatDate(
+      new Date(),
+      "Asia/Kolkata",
+      "yyyy-MM-dd'T'HH:mm:ssXXX",
+    );
+    sheet.getRange(found.rowIndex, hdr["Locked"] + 1).setValue(false);
+    sheet
+      .getRange(found.rowIndex, hdr["Version"] + 1)
+      .setValue(Number(found.rowValues[hdr["Version"]]) + 1);
+    sheet.getRange(found.rowIndex, hdr["UpdatedAt"] + 1).setValue(now);
 
-    writeActivityLog('unlockBill', payload, { billId: payload.billId });
+    writeActivityLog("unlockBill", payload, { billId: payload.billId });
     return respond(true, { billId: payload.billId });
   });
 }
@@ -316,81 +463,118 @@ function unlockBill(payload) {
  */
 function recordPayment(payload) {
   const v = validatePaymentPayload(payload);
-  if (!v.valid) return respond(false, null, { code: 'VALIDATION_ERROR', message: v.errors.join('; ') });
+  if (!v.valid)
+    return respond(false, null, {
+      code: "VALIDATION_ERROR",
+      message: v.errors.join("; "),
+    });
 
   return withLock(function () {
-    const paymentSheet = getSheet('PAYMENTS');
+    const paymentSheet = getSheet("PAYMENTS");
     const paymentHdr = buildHeaderMap(paymentSheet);
 
     // Idempotency check FIRST, before touching the bill at all.
-    const dup = findRowByColumnValue(paymentSheet, paymentHdr, 'IdempotencyKey', payload.idempotencyKey);
+    const dup = findRowByColumnValue(
+      paymentSheet,
+      paymentHdr,
+      "IdempotencyKey",
+      payload.idempotencyKey,
+    );
     if (dup) {
       return respond(true, {
-        paymentId: dup.rowValues[paymentHdr['PaymentId']],
-        billId: dup.rowValues[paymentHdr['BillId']],
-        duplicate: true
+        paymentId: dup.rowValues[paymentHdr["PaymentId"]],
+        billId: dup.rowValues[paymentHdr["BillId"]],
+        duplicate: true,
       });
     }
 
-    const billSheet = getSheet('BILLS');
+    const billSheet = getSheet("BILLS");
     const billHdr = buildHeaderMap(billSheet);
-    const found = findRowById(billSheet, billHdr['BillId'], payload.billId);
-    if (!found) return respond(false, null, { code: 'NOT_FOUND', message: 'Bill not found' });
+    const found = findRowById(billSheet, billHdr["BillId"], payload.billId);
+    if (!found)
+      return respond(false, null, {
+        code: "NOT_FOUND",
+        message: "Bill not found",
+      });
 
-    if (found.rowValues[billHdr['Locked']] === true) {
-      return respond(false, null, { code: 'BILL_LOCKED', message: 'Cannot record payment against a locked bill' });
+    if (found.rowValues[billHdr["Locked"]] === true) {
+      return respond(false, null, {
+        code: "BILL_LOCKED",
+        message: "Cannot record payment against a locked bill",
+      });
     }
 
     // --- Final re-read inside the lock, right before computing the new total.
     // findRowById already read fresh values under the lock we're holding, but
     // we re-fetch explicitly here as a defensive, self-documenting step in
     // case this function is ever refactored to read earlier in its body.
-    const freshRow = billSheet.getRange(found.rowIndex, 1, 1, billSheet.getLastColumn()).getValues()[0];
-    const amount = Number(freshRow[billHdr['Amount']]);
-    const currentPaid = Number(freshRow[billHdr['AmountPaid']]);
+    const freshRow = billSheet
+      .getRange(found.rowIndex, 1, 1, billSheet.getLastColumn())
+      .getValues()[0];
+    const amount = Number(freshRow[billHdr["Amount"]]);
+    const currentPaid = Number(freshRow[billHdr["AmountPaid"]]);
     const paymentAmt = round2(payload.amount);
     const newPaid = round2(currentPaid + paymentAmt);
 
     if (newPaid > amount && !payload.allowOverpayment) {
       return respond(false, null, {
-        code: 'OVERPAYMENT',
-        message: 'Payment would exceed bill amount. Pass allowOverpayment:true to override.',
+        code: "OVERPAYMENT",
+        message:
+          "Payment would exceed bill amount. Pass allowOverpayment:true to override.",
         billAmount: amount,
         currentPaid: currentPaid,
-        attemptedTotal: newPaid
+        attemptedTotal: newPaid,
       });
     }
 
-    const paymentId = 'PAY-' + Utilities.getUuid().substring(0, 8).toUpperCase();
-    const now = Utilities.formatDate(new Date(), 'Asia/Kolkata', "yyyy-MM-dd'T'HH:mm:ssXXX");
+    const paymentId =
+      "PAY-" + Utilities.getUuid().substring(0, 8).toUpperCase();
+    const now = Utilities.formatDate(
+      new Date(),
+      "Asia/Kolkata",
+      "yyyy-MM-dd'T'HH:mm:ssXXX",
+    );
 
     const payRow = [];
-    payRow[paymentHdr['PaymentId']] = paymentId;
-    payRow[paymentHdr['BillId']] = payload.billId;
-    payRow[paymentHdr['CustomerId']] = freshRow[billHdr['CustomerId']];
-    payRow[paymentHdr['Amount']] = paymentAmt;
-    payRow[paymentHdr['Mode']] = payload.mode;
-    payRow[paymentHdr['Date']] = payload.date || Utilities.formatDate(new Date(), 'Asia/Kolkata', 'yyyy-MM-dd');
-    payRow[paymentHdr['Note']] = sanitizeForText(payload.note || '');
-    payRow[paymentHdr['IdempotencyKey']] = payload.idempotencyKey;
-    payRow[paymentHdr['CreatedAt']] = now;
+    payRow[paymentHdr["PaymentId"]] = paymentId;
+    payRow[paymentHdr["BillId"]] = payload.billId;
+    payRow[paymentHdr["CustomerId"]] = freshRow[billHdr["CustomerId"]];
+    payRow[paymentHdr["Amount"]] = paymentAmt;
+    payRow[paymentHdr["Mode"]] = payload.mode;
+    payRow[paymentHdr["Date"]] =
+      payload.date ||
+      Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd");
+    payRow[paymentHdr["Note"]] = sanitizeForText(payload.note || "");
+    payRow[paymentHdr["IdempotencyKey"]] = payload.idempotencyKey;
+    payRow[paymentHdr["CreatedAt"]] = now;
 
     safeAppend(paymentSheet, payRow);
 
-    const newStatus = deriveStatus(amount, newPaid, 'Paid');
-    billSheet.getRange(found.rowIndex, billHdr['AmountPaid'] + 1).setValue(newPaid);
-    billSheet.getRange(found.rowIndex, billHdr['Status'] + 1).setValue(newStatus);
-    billSheet.getRange(found.rowIndex, billHdr['Version'] + 1).setValue(Number(freshRow[billHdr['Version']]) + 1);
-    billSheet.getRange(found.rowIndex, billHdr['UpdatedAt'] + 1).setValue(now);
+    const newStatus = deriveStatus(amount, newPaid, "Paid");
+    billSheet
+      .getRange(found.rowIndex, billHdr["AmountPaid"] + 1)
+      .setValue(newPaid);
+    billSheet
+      .getRange(found.rowIndex, billHdr["Status"] + 1)
+      .setValue(newStatus);
+    billSheet
+      .getRange(found.rowIndex, billHdr["Version"] + 1)
+      .setValue(Number(freshRow[billHdr["Version"]]) + 1);
+    billSheet.getRange(found.rowIndex, billHdr["UpdatedAt"] + 1).setValue(now);
 
-    writeActivityLog('recordPayment', payload, { paymentId: paymentId, billId: payload.billId, newPaid: newPaid, newStatus: newStatus });
+    writeActivityLog("recordPayment", payload, {
+      paymentId: paymentId,
+      billId: payload.billId,
+      newPaid: newPaid,
+      newStatus: newStatus,
+    });
 
     return respond(true, {
       paymentId: paymentId,
       billId: payload.billId,
       amountPaid: newPaid,
       status: newStatus,
-      overpaid: newPaid > amount
+      overpaid: newPaid > amount,
     });
   });
 }
@@ -407,31 +591,49 @@ function recordPayment(payload) {
  */
 function addAdjustment(payload) {
   const v = validateAdjustmentPayload(payload);
-  if (!v.valid) return respond(false, null, { code: 'VALIDATION_ERROR', message: v.errors.join('; ') });
+  if (!v.valid)
+    return respond(false, null, {
+      code: "VALIDATION_ERROR",
+      message: v.errors.join("; "),
+    });
 
   return withLock(function () {
-    const custSheet = getSheet('CUSTOMERS');
+    const custSheet = getSheet("CUSTOMERS");
     const custHdr = buildHeaderMap(custSheet);
-    const custRow = findRowById(custSheet, custHdr['CustomerId'], payload.customerId);
-    if (!custRow) return respond(false, null, { code: 'NOT_FOUND', message: 'Customer not found' });
+    const custRow = findRowById(
+      custSheet,
+      custHdr["CustomerId"],
+      payload.customerId,
+    );
+    if (!custRow)
+      return respond(false, null, {
+        code: "NOT_FOUND",
+        message: "Customer not found",
+      });
 
-    const sheet = getSheet('ADJUSTMENTS');
+    const sheet = getSheet("ADJUSTMENTS");
     const hdr = buildHeaderMap(sheet);
-    const adjId = 'ADJ-' + Utilities.getUuid().substring(0, 8).toUpperCase();
-    const now = Utilities.formatDate(new Date(), 'Asia/Kolkata', "yyyy-MM-dd'T'HH:mm:ssXXX");
+    const adjId = "ADJ-" + Utilities.getUuid().substring(0, 8).toUpperCase();
+    const now = Utilities.formatDate(
+      new Date(),
+      "Asia/Kolkata",
+      "yyyy-MM-dd'T'HH:mm:ssXXX",
+    );
 
     const row = [];
-    row[hdr['AdjustmentId']] = adjId;
-    row[hdr['CustomerId']] = payload.customerId;
-    row[hdr['Date']] = payload.date || Utilities.formatDate(new Date(), 'Asia/Kolkata', 'yyyy-MM-dd');
-    row[hdr['Amount']] = round2(payload.amount);
-    row[hdr['Reason']] = sanitizeForText(payload.reason).trim();
-    row[hdr['Applied']] = false;
-    row[hdr['BillId']] = '';
-    row[hdr['CreatedAt']] = now;
+    row[hdr["AdjustmentId"]] = adjId;
+    row[hdr["CustomerId"]] = payload.customerId;
+    row[hdr["Date"]] =
+      payload.date ||
+      Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd");
+    row[hdr["Amount"]] = round2(payload.amount);
+    row[hdr["Reason"]] = sanitizeForText(payload.reason).trim();
+    row[hdr["Applied"]] = false;
+    row[hdr["BillId"]] = "";
+    row[hdr["CreatedAt"]] = now;
 
     safeAppend(sheet, row);
-    writeActivityLog('addAdjustment', payload, { adjustmentId: adjId });
+    writeActivityLog("addAdjustment", payload, { adjustmentId: adjId });
 
     return respond(true, { adjustmentId: adjId });
   });
@@ -447,43 +649,87 @@ function addAdjustment(payload) {
  * Required: adjustmentId, billId
  */
 function applyAdjustment(payload) {
-  if (!payload.adjustmentId) return respond(false, null, { code: 'VALIDATION_ERROR', message: 'adjustmentId is required' });
-  if (!payload.billId) return respond(false, null, { code: 'VALIDATION_ERROR', message: 'billId is required' });
+  if (!payload.adjustmentId)
+    return respond(false, null, {
+      code: "VALIDATION_ERROR",
+      message: "adjustmentId is required",
+    });
+  if (!payload.billId)
+    return respond(false, null, {
+      code: "VALIDATION_ERROR",
+      message: "billId is required",
+    });
 
   return withLock(function () {
-    const adjSheet = getSheet('ADJUSTMENTS');
+    const adjSheet = getSheet("ADJUSTMENTS");
     const adjHdr = buildHeaderMap(adjSheet);
-    const adjRow = findRowById(adjSheet, adjHdr['AdjustmentId'], payload.adjustmentId);
-    if (!adjRow) return respond(false, null, { code: 'NOT_FOUND', message: 'Adjustment not found' });
-    if (adjRow.rowValues[adjHdr['Applied']] === true) {
-      return respond(false, null, { code: 'ALREADY_APPLIED', message: 'Adjustment was already applied' });
+    const adjRow = findRowById(
+      adjSheet,
+      adjHdr["AdjustmentId"],
+      payload.adjustmentId,
+    );
+    if (!adjRow)
+      return respond(false, null, {
+        code: "NOT_FOUND",
+        message: "Adjustment not found",
+      });
+    if (adjRow.rowValues[adjHdr["Applied"]] === true) {
+      return respond(false, null, {
+        code: "ALREADY_APPLIED",
+        message: "Adjustment was already applied",
+      });
     }
 
-    const billSheet = getSheet('BILLS');
+    const billSheet = getSheet("BILLS");
     const billHdr = buildHeaderMap(billSheet);
-    const billRow = findRowById(billSheet, billHdr['BillId'], payload.billId);
-    if (!billRow) return respond(false, null, { code: 'NOT_FOUND', message: 'Bill not found' });
-    if (billRow.rowValues[billHdr['Locked']] === true) {
-      return respond(false, null, { code: 'BILL_LOCKED', message: 'Cannot apply adjustment to a locked bill' });
+    const billRow = findRowById(billSheet, billHdr["BillId"], payload.billId);
+    if (!billRow)
+      return respond(false, null, {
+        code: "NOT_FOUND",
+        message: "Bill not found",
+      });
+    if (billRow.rowValues[billHdr["Locked"]] === true) {
+      return respond(false, null, {
+        code: "BILL_LOCKED",
+        message: "Cannot apply adjustment to a locked bill",
+      });
     }
 
-    const adjAmount = Number(adjRow.rowValues[adjHdr['Amount']]);
-    const currentAmount = Number(billRow.rowValues[billHdr['Amount']]);
-    const currentPaid = Number(billRow.rowValues[billHdr['AmountPaid']]);
+    const adjAmount = Number(adjRow.rowValues[adjHdr["Amount"]]);
+    const currentAmount = Number(billRow.rowValues[billHdr["Amount"]]);
+    const currentPaid = Number(billRow.rowValues[billHdr["AmountPaid"]]);
     let newAmount = round2(currentAmount + adjAmount);
     if (newAmount < 0) newAmount = 0;
 
-    const now = Utilities.formatDate(new Date(), 'Asia/Kolkata', "yyyy-MM-dd'T'HH:mm:ssXXX");
+    const now = Utilities.formatDate(
+      new Date(),
+      "Asia/Kolkata",
+      "yyyy-MM-dd'T'HH:mm:ssXXX",
+    );
 
-    billSheet.getRange(billRow.rowIndex, billHdr['Amount'] + 1).setValue(newAmount);
-    billSheet.getRange(billRow.rowIndex, billHdr['Status'] + 1).setValue(deriveStatus(newAmount, currentPaid, 'Adjusted'));
-    billSheet.getRange(billRow.rowIndex, billHdr['Version'] + 1).setValue(Number(billRow.rowValues[billHdr['Version']]) + 1);
-    billSheet.getRange(billRow.rowIndex, billHdr['UpdatedAt'] + 1).setValue(now);
+    billSheet
+      .getRange(billRow.rowIndex, billHdr["Amount"] + 1)
+      .setValue(newAmount);
+    billSheet
+      .getRange(billRow.rowIndex, billHdr["Status"] + 1)
+      .setValue(deriveStatus(newAmount, currentPaid, "Adjusted"));
+    billSheet
+      .getRange(billRow.rowIndex, billHdr["Version"] + 1)
+      .setValue(Number(billRow.rowValues[billHdr["Version"]]) + 1);
+    billSheet
+      .getRange(billRow.rowIndex, billHdr["UpdatedAt"] + 1)
+      .setValue(now);
 
-    adjSheet.getRange(adjRow.rowIndex, adjHdr['Applied'] + 1).setValue(true);
-    adjSheet.getRange(adjRow.rowIndex, adjHdr['BillId'] + 1).setValue(payload.billId);
+    adjSheet.getRange(adjRow.rowIndex, adjHdr["Applied"] + 1).setValue(true);
+    adjSheet
+      .getRange(adjRow.rowIndex, adjHdr["BillId"] + 1)
+      .setValue(payload.billId);
 
-    writeActivityLog('applyAdjustment', payload, { adjustmentId: payload.adjustmentId, billId: payload.billId, newAmount: newAmount });
+    writeActivityLog("applyAdjustment", payload, {
+      adjustmentId: payload.adjustmentId,
+      billId: payload.billId,
+      newAmount: newAmount,
+    });
     return respond(true, { billId: payload.billId, newAmount: newAmount });
   });
 }
@@ -496,16 +742,20 @@ function applyAdjustment(payload) {
  * getBills — paginated, filterable by customerId, month, status
  */
 function getBills(payload) {
-  const sheet = getSheet('BILLS');
+  const sheet = getSheet("BILLS");
   const hdr = buildHeaderMap(sheet);
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return respond(true, { bills: [], total: 0, hasMore: false });
+  if (lastRow < 2)
+    return respond(true, { bills: [], total: 0, hasMore: false });
 
-  const values = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
-  let filtered = values.filter(row => {
-    if (payload.customerId && row[hdr['CustomerId']] !== payload.customerId) return false;
-    if (payload.month && row[hdr['Month']] !== payload.month) return false;
-    if (payload.status && row[hdr['Status']] !== payload.status) return false;
+  const values = sheet
+    .getRange(2, 1, lastRow - 1, sheet.getLastColumn())
+    .getValues();
+  let filtered = values.filter((row) => {
+    if (payload.customerId && row[hdr["CustomerId"]] !== payload.customerId)
+      return false;
+    if (payload.month && row[hdr["Month"]] !== payload.month) return false;
+    if (payload.status && row[hdr["Status"]] !== payload.status) return false;
     return true;
   });
 
@@ -514,19 +764,23 @@ function getBills(payload) {
   const offset = Number(payload.offset) || 0;
   const page = filtered.slice(offset, offset + limit);
 
-  const bills = page.map(row => ({
-    billId: row[hdr['BillId']],
-    customerId: row[hdr['CustomerId']],
-    month: row[hdr['Month']],
-    amount: row[hdr['Amount']],
-    amountPaid: row[hdr['AmountPaid']],
-    status: row[hdr['Status']],
-    dueDate: row[hdr['DueDate']],
-    locked: !!row[hdr['Locked']],
-    version: row[hdr['Version']],
+  const bills = page.map((row) => ({
+    billId: row[hdr["BillId"]],
+    customerId: row[hdr["CustomerId"]],
+    month: row[hdr["Month"]],
+    amount: row[hdr["Amount"]],
+    amountPaid: row[hdr["AmountPaid"]],
+    status: row[hdr["Status"]],
+    dueDate: row[hdr["DueDate"]],
+    locked: !!row[hdr["Locked"]],
+    version: row[hdr["Version"]],
   }));
 
-  return respond(true, { bills: bills, total: total, hasMore: offset + limit < total });
+  return respond(true, {
+    bills: bills,
+    total: total,
+    hasMore: offset + limit < total,
+  });
 }
 
 /**
@@ -534,31 +788,71 @@ function getBills(payload) {
  * share or printing. All interpolated fields pass through sanitizeForText.
  */
 function getBillText(payload) {
-  if (!payload.billId) return respond(false, null, { code: 'VALIDATION_ERROR', message: 'billId is required' });
+  if (!payload.billId)
+    return respond(false, null, {
+      code: "VALIDATION_ERROR",
+      message: "billId is required",
+    });
 
-  const billSheet = getSheet('BILLS');
+  const billSheet = getSheet("BILLS");
   const billHdr = buildHeaderMap(billSheet);
-  const billRow = findRowById(billSheet, billHdr['BillId'], payload.billId);
-  if (!billRow) return respond(false, null, { code: 'NOT_FOUND', message: 'Bill not found' });
+  const billRow = findRowById(billSheet, billHdr["BillId"], payload.billId);
+  if (!billRow)
+    return respond(false, null, {
+      code: "NOT_FOUND",
+      message: "Bill not found",
+    });
 
-  const custSheet = getSheet('CUSTOMERS');
+  const custSheet = getSheet("CUSTOMERS");
   const custHdr = buildHeaderMap(custSheet);
-  const custRow = findRowById(custSheet, custHdr['CustomerId'], billRow.rowValues[billHdr['CustomerId']]);
-  const custName = custRow ? sanitizeForText(custRow.rowValues[custHdr['Name']]) : 'Customer';
+  const custRow = findRowById(
+    custSheet,
+    custHdr["CustomerId"],
+    billRow.rowValues[billHdr["CustomerId"]],
+  );
+  const custName = custRow
+    ? sanitizeForText(custRow.rowValues[custHdr["Name"]])
+    : "Customer";
 
-  const amount = Number(billRow.rowValues[billHdr['Amount']]);
-  const paid = Number(billRow.rowValues[billHdr['AmountPaid']]);
+  const amount = Number(billRow.rowValues[billHdr["Amount"]]);
+  const paid = Number(billRow.rowValues[billHdr["AmountPaid"]]);
   const pending = round2(amount - paid);
 
-  const text = 'Dear ' + custName + ',\n' +
-    'Your milk bill for ' + billRow.rowValues[billHdr['Month']] + ':\n' +
-    'Amount: Rs.' + amount.toFixed(2) + '\n' +
-    'Paid: Rs.' + paid.toFixed(2) + '\n' +
-    'Pending: Rs.' + pending.toFixed(2) + '\n' +
-    'Due: ' + billRow.rowValues[billHdr['DueDate']] + '\n\n' +
-    '- Milk Delivery Admin';
+  const text =
+    "Dear " +
+    custName +
+    ",\n" +
+    "Your milk bill for " +
+    billRow.rowValues[billHdr["Month"]] +
+    ":\n" +
+    "Amount: Rs." +
+    amount.toFixed(2) +
+    "\n" +
+    "Paid: Rs." +
+    paid.toFixed(2) +
+    "\n" +
+    "Pending: Rs." +
+    pending.toFixed(2) +
+    "\n" +
+    "Due: " +
+    billRow.rowValues[billHdr["DueDate"]] +
+    "\n\n" +
+    "- Milk Delivery Admin";
 
   return respond(true, { text: text });
+}
+
+function getAdjustments() {
+  const sheet = getSheet("Adjustments");
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { success: true, data: { adjustments: [] } };
+  const headers = data[0];
+  const adjustments = data.slice(1).map((row) => {
+    const obj = {};
+    headers.forEach((h, i) => (obj[h] = row[i]));
+    return obj;
+  });
+  return { success: true, data: { adjustments } };
 }
 
 // ----------------------------------------------------------------------------
@@ -572,47 +866,64 @@ function getBillText(payload) {
  */
 function reconcileBillingLedger(payload) {
   return withLock(function () {
-    const billSheet = getSheet('BILLS');
+    const billSheet = getSheet("BILLS");
     const billHdr = buildHeaderMap(billSheet);
     const billLastRow = billSheet.getLastRow();
     if (billLastRow < 2) return respond(true, { checked: 0, corrected: 0 });
 
-    const bills = billSheet.getRange(2, 1, billLastRow - 1, billSheet.getLastColumn()).getValues();
+    const bills = billSheet
+      .getRange(2, 1, billLastRow - 1, billSheet.getLastColumn())
+      .getValues();
 
-    const paymentSheet = getSheet('PAYMENTS');
+    const paymentSheet = getSheet("PAYMENTS");
     const paymentHdr = buildHeaderMap(paymentSheet);
     const paymentLastRow = paymentSheet.getLastRow();
     const paymentsByBill = {};
     if (paymentLastRow >= 2) {
-      const payments = paymentSheet.getRange(2, 1, paymentLastRow - 1, paymentSheet.getLastColumn()).getValues();
-      payments.forEach(p => {
-        const billId = p[paymentHdr['BillId']];
-        paymentsByBill[billId] = round2((paymentsByBill[billId] || 0) + Number(p[paymentHdr['Amount']]));
+      const payments = paymentSheet
+        .getRange(2, 1, paymentLastRow - 1, paymentSheet.getLastColumn())
+        .getValues();
+      payments.forEach((p) => {
+        const billId = p[paymentHdr["BillId"]];
+        paymentsByBill[billId] = round2(
+          (paymentsByBill[billId] || 0) + Number(p[paymentHdr["Amount"]]),
+        );
       });
     }
 
-    const now = Utilities.formatDate(new Date(), 'Asia/Kolkata', "yyyy-MM-dd'T'HH:mm:ssXXX");
+    const now = Utilities.formatDate(
+      new Date(),
+      "Asia/Kolkata",
+      "yyyy-MM-dd'T'HH:mm:ssXXX",
+    );
     let corrected = 0;
 
     bills.forEach((row, i) => {
-      if (row[billHdr['Locked']] === true) return; // Rule per diagnostic #9
-      const billId = row[billHdr['BillId']];
-      const recorded = round2(Number(row[billHdr['AmountPaid']]));
+      if (row[billHdr["Locked"]] === true) return; // Rule per diagnostic #9
+      const billId = row[billHdr["BillId"]];
+      const recorded = round2(Number(row[billHdr["AmountPaid"]]));
       const actual = round2(paymentsByBill[billId] || 0);
 
       if (recorded !== actual) {
         const rowIndex = i + 2;
-        const amount = Number(row[billHdr['Amount']]);
-        const newStatus = deriveStatus(amount, actual, 'Reconciled');
-        billSheet.getRange(rowIndex, billHdr['AmountPaid'] + 1).setValue(actual);
-        billSheet.getRange(rowIndex, billHdr['Status'] + 1).setValue(newStatus);
-        billSheet.getRange(rowIndex, billHdr['Version'] + 1).setValue(Number(row[billHdr['Version']]) + 1);
-        billSheet.getRange(rowIndex, billHdr['UpdatedAt'] + 1).setValue(now);
+        const amount = Number(row[billHdr["Amount"]]);
+        const newStatus = deriveStatus(amount, actual, "Reconciled");
+        billSheet
+          .getRange(rowIndex, billHdr["AmountPaid"] + 1)
+          .setValue(actual);
+        billSheet.getRange(rowIndex, billHdr["Status"] + 1).setValue(newStatus);
+        billSheet
+          .getRange(rowIndex, billHdr["Version"] + 1)
+          .setValue(Number(row[billHdr["Version"]]) + 1);
+        billSheet.getRange(rowIndex, billHdr["UpdatedAt"] + 1).setValue(now);
         corrected++;
       }
     });
 
-    writeActivityLog('reconcileBillingLedger', payload, { checked: bills.length, corrected: corrected });
+    writeActivityLog("reconcileBillingLedger", payload, {
+      checked: bills.length,
+      corrected: corrected,
+    });
     return respond(true, { checked: bills.length, corrected: corrected });
   });
 }
@@ -620,4 +931,3 @@ function reconcileBillingLedger(payload) {
 // NOTE: findRowByTwoColumns() is intentionally NOT defined in this file.
 // It is owned by Part 4 (Core.gs). Declaring it here would cause a duplicate
 // function declaration crash at Apps Script deployment time.
-

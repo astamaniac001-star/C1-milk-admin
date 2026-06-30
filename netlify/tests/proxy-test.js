@@ -1,4 +1,4 @@
-
+/* global process */
 import { describe, it, expect } from "vitest";
 
 // 1. Set environment variables BEFORE the static import
@@ -6,30 +6,32 @@ process.env.APPS_SCRIPT_URL = "https://example.com";
 process.env.APP_SECRET = "secret";
 process.env.ALLOWED_ORIGIN = "https://app.example.com";
 
-// 2. STATIC IMPORTS. 
+// 2. STATIC IMPORTS.
 // Fallow's AST parser reads these to grant "test coverage path" credit!
-import { 
-  validateRequest, 
-  handler, 
-  checkOrigin, 
-  parseAndValidateBody, 
-  handleUpstreamResponse 
+import {
+  validateRequest,
+  handler,
+  checkOrigin,
+  parseAndValidateBody,
+  handleUpstreamResponse,
 } from "../functions/proxy.js";
 
 describe("proxy request validation", () => {
   it("accepts valid requests from the configured origin", () => {
-    const corsHeaders = { "Access-Control-Allow-Origin": "https://app.example.com" };
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "https://app.example.com",
+    };
     const result = validateRequest(
       {
         httpMethod: "POST",
         headers: { origin: "https://app.example.com" },
         body: JSON.stringify({ action: "ping" }),
       },
-      corsHeaders
+      corsHeaders,
     );
 
     // Refactored proxy.js returns { body: ... } on success, not { ok: true }
-    expect(result.statusCode).toBeUndefined(); 
+    expect(result.statusCode).toBeUndefined();
     expect(result.body.action).toBe("ping");
   });
 
@@ -40,7 +42,7 @@ describe("proxy request validation", () => {
         headers: { origin: "https://evil.example.com" },
         body: JSON.stringify({ action: "ping" }),
       },
-      {}
+      {},
     );
 
     // Refactored proxy.js returns the error response directly

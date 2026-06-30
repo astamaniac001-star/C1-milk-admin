@@ -1,26 +1,22 @@
-
 import { describe, it, expect, vi } from "vitest";
-import { useAppHandlers } from "./useAppHandlers.js";
+import { useAppHandlers } from "./useAppHandlers";
 
-// Mock the API so the tests don't try to make real network requests
+vi.mock("react", () => ({
+  useMemo: (fn) => fn(),
+  useCallback: (fn) => fn,
+  useState: (init) => [init, vi.fn()],
+  useEffect: () => {},
+}));
+
 vi.mock("../lib/api.js", () => ({
-  callApi: vi.fn().mockResolvedValue({ customerId: "C123", adjustmentId: "ADJ123", success: true }),
-  mapCustomerToApi: (form) => form, 
-}));
-
-// Mock the dependencies (Removed uuid and monthLabel since they are no longer used)
-vi.mock("../lib/utils.js", () => ({
-  fmt: (v) => `₹${v}`,
-  cleanPhone: (p) => p.replace(/\D/g, ""),
-}));
-
-// REMOVED: The mock for ../lib/billing.js because that file was deleted!
-
-vi.mock("../lib/validation.js", () => ({
-  validateCustomerForm: () => null,
-  buildNewCustomer: (f) => ({ ...f, id: "C123", status: "Active" }),
-  validateImportForm: () => null,
-  parseImportValues: (f) => ({ qty: f.qty, rate: f.rate, total: f.qty * f.rate }),
+  callApi: vi.fn().mockResolvedValue({
+    success: true,
+    data: { customer: { id: "C123" }, amountPaid: 100, status: "Paid" },
+  }),
+  mapCustomerToApi: (form) => form,
+  mapImportToApi: (form) => form,
+  mapPaymentToApi: (id, amt) => ({ billId: id, amountPaid: amt }),
+  mapBillFromApi: (b) => b,
 }));
 
 function createMockHandlers(overrides = {}) {
@@ -43,6 +39,7 @@ function createMockHandlers(overrides = {}) {
     billMonth: "2025-01",
     activeC: [],
   };
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   return useAppHandlers({ ...defaults, ...overrides });
 }
 

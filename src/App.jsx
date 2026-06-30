@@ -9,30 +9,37 @@ import { useAppHandlers } from "./hooks/useAppHandlers.js";
 import { useAuth } from "./hooks/useAuth.js";
 
 export default function App() {
+  // 1. ALL HOOKS MUST BE CALLED UNCONDITIONALLY AT THE VERY TOP
   const auth = useAuth();
   const state = useAppState(auth.token);
+  const handlers = useAppHandlers(state); // <--- MUST BE HERE
 
-  // If not logged in, show the PIN screen
+  // 2. NOW we can do conditional returns
   if (!auth.isAuthenticated) {
-    return <Login onLogin={auth.login} loading={auth.loading} error={auth.error} />;
+    return (
+      <Login onLogin={auth.login} loading={auth.loading} error={auth.error} />
+    );
   }
-
-  const handlers = useAppHandlers(state);
 
   const footer = (
     <>
       {state.toast && (
-        <Toast msg={state.toast.msg} type={state.toast.type} onClose={() => state.setToast(null)} key={state.toast.id} />
+        <Toast
+          msg={state.toast.msg}
+          type={state.toast.type}
+          onClose={() => state.setToast(null)}
+          key={state.toast.id}
+        />
       )}
     </>
   );
 
   return (
-    <AppShell 
-      tab={state.tab} 
-      today={state.today} 
-      queue={state.queue} 
-      onTabChange={state.setTab} 
+    <AppShell
+      tab={state.tab}
+      today={state.today}
+      queue={state.queue}
+      onTabChange={state.setTab}
       footer={footer}
     >
       <AppPage tab={state.tab} state={state} handlers={handlers} />

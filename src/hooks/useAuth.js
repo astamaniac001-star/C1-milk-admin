@@ -1,11 +1,12 @@
-
 // src/hooks/useAuth.js
 import { useState } from "react";
 import { callApi } from "../lib/api.js";
 
 export function useAuth() {
   const [token, setToken] = useState(localStorage.getItem("token"));
-  const [sessionSecret, setSessionSecret] = useState(localStorage.getItem("sessionSecret"));
+  const [sessionSecret, setSessionSecret] = useState(
+    localStorage.getItem("sessionSecret"),
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -32,5 +33,13 @@ export function useAuth() {
     setSessionSecret(null);
   };
 
-  return { token, sessionSecret, login, logout, loading, error, isAuthenticated: !!token };
+  return {
+    token,
+    sessionSecret,
+    login,
+    logout,
+    loading,
+    error,
+    isAuthenticated: !!token,
+  };
 }

@@ -6,6 +6,8 @@ body {
   background: #f8fafc;
   color: #111;
 }
-button, input, select {
+button,
+input,
+select {
   font: inherit;
 }

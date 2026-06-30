@@ -25,16 +25,16 @@
  * evicts the old cache on the next visit.
  * ============================================================================ */
 
-const CACHE = 'milk-v19'; // bumped: precache hashed Vite bundles at install (Fix #12)
+const CACHE = "milk-v19"; // bumped: precache hashed Vite bundles at install (Fix #12)
 const SHELL = [
-  '/',
-  '/index.html',
-  '/app.js',
-  '/app.css',
-  '/favicon.svg',
-  '/icons.svg',
-  '/apple-touch-icon.png',
-  '/icon-512.png',
+  "/",
+  "/index.html",
+  "/app.js",
+  "/app.css",
+  "/favicon.svg",
+  "/icons.svg",
+  "/apple-touch-icon.png",
+  "/icon-512.png",
 ];
 
 // ── discoverAssets: read hashed bundle URLs from the live index.html ──────────
@@ -60,26 +60,33 @@ function _extractLinkUrls(html) {
 
 function _normalizeUrls(urls, origin) {
   return [...urls]
-    .map(u => {
-      try { return new URL(u, origin); } catch { return null; }
+    .map((u) => {
+      try {
+        return new URL(u, origin);
+      } catch {
+        return null;
+      }
     })
-    .filter(u => u && u.origin === origin)
-    .map(u => u.pathname);
+    .filter((u) => u && u.origin === origin)
+    .map((u) => u.pathname);
 }
 
 async function discoverAssets() {
   const urls = new Set();
   try {
-    const res = await fetch('/index.html', { cache: 'no-store' });
+    const res = await fetch("/index.html", { cache: "no-store" });
     if (!res.ok) return [];
     const html = await res.text();
 
-    _extractScriptUrls(html).forEach(u => urls.add(u));
-    _extractLinkUrls(html).forEach(u => urls.add(u));
+    _extractScriptUrls(html).forEach((u) => urls.add(u));
+    _extractLinkUrls(html).forEach((u) => urls.add(u));
   } catch (err) {
     // Network failed during install (unlikely — install only runs online).
     // Fall back to SHELL only; runtime /assets/ caching still backstops us.
-    console.warn('[SW] discoverAssets failed, precaching SHELL only:', err.message);
+    console.warn(
+      "[SW] discoverAssets failed, precaching SHELL only:",
+      err.message,
+    );
     return [];
   }
 
@@ -87,38 +94,47 @@ async function discoverAssets() {
 }
 
 // ── Install: pre-cache shell + hashed bundles ────────────────────────────────
-self.addEventListener('install', e => {
-  e.waitUntil((async () => {
-    const cache = await caches.open(CACHE);
-    const discovered = await discoverAssets();
-    const toCache = [...SHELL, ...discovered];
-    await Promise.all(
-      toCache.map(url =>
-        cache.add(new Request(url, { cache: 'reload' })).catch(err =>
-          console.warn('[SW] Cache install skipped:', url, err.message)
-        )
-      )
-    );
-    self.skipWaiting();
-  })());
+self.addEventListener("install", (e) => {
+  e.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      const discovered = await discoverAssets();
+      const toCache = [...SHELL, ...discovered];
+      await Promise.all(
+        toCache.map((url) =>
+          cache
+            .add(new Request(url, { cache: "reload" }))
+            .catch((err) =>
+              console.warn("[SW] Cache install skipped:", url, err.message),
+            ),
+        ),
+      );
+      self.skipWaiting();
+    })(),
+  );
 });
 
 // ── Activate: evict old caches ────────────────────────────────────────────────
-self.addEventListener('activate', e => {
-  e.waitUntil((async () => {
-    const keys = await caches.keys();
-    await Promise.all(
-      keys
-        .filter(k => k.startsWith('milk-') && k !== CACHE)
-        .map(k => caches.delete(k))
-    );
-    await self.clients.claim();
-  })());
+self.addEventListener("activate", (e) => {
+  e.waitUntil(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((k) => k.startsWith("milk-") && k !== CACHE)
+          .map((k) => caches.delete(k)),
+      );
+      await self.clients.claim();
+    })(),
+  );
 });
 
 // ── Fetch: routing strategy ───────────────────────────────────────────────────
 function _isApiCall(url) {
-  return url.pathname.startsWith('/api') || url.pathname.includes('/.netlify/functions/');
+  return (
+    url.pathname.startsWith("/api") ||
+    url.pathname.includes("/.netlify/functions/")
+  );
 }
 
 async function _fetchAndCache(request) {
@@ -132,7 +148,7 @@ async function _fetchAndCache(request) {
 
 async function _cacheMatchOrError(request) {
   const cached = await caches.match(request);
-  return cached || new Response('', { status: 503 });
+  return cached || new Response("", { status: 503 });
 }
 
 async function _handleAssetRequest(request) {
@@ -146,12 +162,13 @@ async function _handleAssetRequest(request) {
 }
 
 function _getOfflineFallback(request) {
-  if (request.mode === 'navigate') {
-    return new Response('<h1>Offline</h1><p>Reconnect and refresh.</p>', {
-      status: 503, headers: { 'Content-Type': 'text/html' },
+  if (request.mode === "navigate") {
+    return new Response("<h1>Offline</h1><p>Reconnect and refresh.</p>", {
+      status: 503,
+      headers: { "Content-Type": "text/html" },
     });
   }
-  return new Response('', { status: 503 });
+  return new Response("", { status: 503 });
 }
 
 async function _handleShellRequest(request) {
@@ -160,7 +177,7 @@ async function _handleShellRequest(request) {
   try {
     return await _fetchAndCache(request);
   } catch {
-    const fallback = await caches.match('/index.html');
+    const fallback = await caches.match("/index.html");
     return fallback || _getOfflineFallback(request);
   }
 }
@@ -175,26 +192,26 @@ async function _handleNetworkFirstRequest(request) {
 
 // REFACTORED: Extracted the '||' logic into a helper to drop cyclomatic complexity
 function _isShellUrl(path) {
-  return path === '/' || SHELL.includes(path);
+  return path === "/" || SHELL.includes(path);
 }
 
 // Complexity is now 4 (Base 1 + 3 'if' statements)
 function determineFetchStrategy(url) {
-  if (_isApiCall(url)) return 'pass-through';
-  if (url.pathname.startsWith('/assets/')) return 'asset';
-  if (_isShellUrl(url.pathname)) return 'shell';
-  return 'network-first';
+  if (_isApiCall(url)) return "pass-through";
+  if (url.pathname.startsWith("/assets/")) return "asset";
+  if (_isShellUrl(url.pathname)) return "shell";
+  return "network-first";
 }
 
 // Map strategies directly to handler functions to eliminate the switch statement
 const STRATEGY_HANDLERS = {
-  'asset': _handleAssetRequest,
-  'shell': _handleShellRequest,
-  'network-first': _handleNetworkFirstRequest,
+  asset: _handleAssetRequest,
+  shell: _handleShellRequest,
+  "network-first": _handleNetworkFirstRequest,
 };
 
 // Complexity reduced by using a lookup map instead of a switch statement
-self.addEventListener('fetch', e => {
+self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   const strategy = determineFetchStrategy(url);
   const handler = STRATEGY_HANDLERS[strategy];
@@ -206,6 +223,6 @@ self.addEventListener('fetch', e => {
 });
 
 // ── Message: SKIP_WAITING (for update-on-refresh UX) ─────────────────────────
-self.addEventListener('message', e => {
-  if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
+self.addEventListener("message", (e) => {
+  if (e.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
