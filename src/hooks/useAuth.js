@@ -15,9 +15,7 @@ const SECRET_KEY = "sessionSecret";
 
 export function useAuth() {
   const [token, setToken] = useState(STORE.getItem(TOKEN_KEY));
-  const [sessionSecret, setSessionSecret] = useState(
-    STORE.getItem(SECRET_KEY),
-  );
+  const [sessionSecret, setSessionSecret] = useState(STORE.getItem(SECRET_KEY));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 

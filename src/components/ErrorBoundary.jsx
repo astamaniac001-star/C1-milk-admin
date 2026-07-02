@@ -29,7 +29,6 @@ export class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     this.setState({ info });
-    // eslint-disable-next-line no-console
     console.error(
       "[ErrorBoundary] Uncaught render error:",
       error,
@@ -59,6 +58,7 @@ export class ErrorBoundary extends Component {
     window.location.reload();
   };
 
+  // fallow-ignore-next-line complexity
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;

@@ -72,6 +72,7 @@ function AdjustmentActions({ applied, onApply }) {
   );
 }
 
+// fallow-ignore-next-line complexity
 function buildAdjusterResolver(customers, bills) {
   const customerById = new Map();
   for (const c of customers || []) customerById.set(c.id, c);
@@ -83,6 +84,7 @@ function buildAdjusterResolver(customers, bills) {
     customerNameById(id) {
       return (id && customerById.get(id)?.name) || "Unknown Customer";
     },
+    // fallow-ignore-next-line complexity
     customerNameForAdjustment(adj) {
       // Adjustments reference a billId (when applied) or a customerId directly
       // (when unapplied). Try both, then fall back to unknown.
@@ -128,7 +130,12 @@ function AdjustmentItem({ a, onApplyAdj, resolveCustomer }) {
   );
 }
 
-function AdjustmentsCard({ adjustments, onOpenModal, onApplyAdj, resolveCustomer }) {
+function AdjustmentsCard({
+  adjustments,
+  onOpenModal,
+  onApplyAdj,
+  resolveCustomer,
+}) {
   return (
     <Card>
       <CardHeader

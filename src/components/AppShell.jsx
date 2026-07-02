@@ -64,7 +64,16 @@ function TabButton({ tab, active, onSelect }) {
   );
 }
 
-export function AppShell({ tab, today, onTabChange, onLogout, children, footer }) {
+export function AppShell({
+  tab,
+  today,
+  onTabChange,
+  onLogout,
+  loadErrors = [],
+  onRefresh,
+  children,
+  footer,
+}) {
   return (
     <div
       style={{
@@ -77,6 +86,39 @@ export function AppShell({ tab, today, onTabChange, onLogout, children, footer }
         paddingBottom: 68,
       }}
     >
+      {/* Data Load Error Banner */}
+      {loadErrors.length > 0 && (
+        <div
+          style={{
+            background: "#fee2e2",
+            color: "#991b1b",
+            padding: "8px 16px",
+            fontSize: 12,
+            fontWeight: 600,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            borderBottom: "1px solid #fca5a5",
+          }}
+        >
+          <span>⚠ Failed to load: {loadErrors.join(", ")}</span>
+          <button
+            onClick={onRefresh}
+            style={{
+              background: "#991b1b",
+              color: "#fff",
+              border: "none",
+              borderRadius: 4,
+              padding: "4px 8px",
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
       <div
         style={{
           background: BLUE,
@@ -142,9 +184,7 @@ export function AppShell({ tab, today, onTabChange, onLogout, children, footer }
           )}
         </div>
       </div>
-
       <div style={{ padding: "14px 12px" }}>{children}</div>
-
       <div
         style={{
           position: "fixed",
@@ -163,7 +203,6 @@ export function AppShell({ tab, today, onTabChange, onLogout, children, footer }
           <TabButton key={t.id} tab={t} active={tab} onSelect={onTabChange} />
         ))}
       </div>
-
       {footer}
     </div>
   );

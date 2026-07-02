@@ -16,10 +16,21 @@ const QUICK_ACTIONS = [
 ];
 
 const MONTH_NAMES = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ];
 
+// fallow-ignore-next-line complexity
 function monthLabel(YYYYMM) {
   if (!YYYYMM || typeof YYYYMM !== "string" || YYYYMM.length < 7) return YYYYMM;
   const monthIdx = Number(YYYYMM.substring(5, 7)) - 1;
@@ -30,7 +41,6 @@ function monthLabel(YYYYMM) {
 export default function Dashboard({
   today,
   activeC,
-  totalRevenue,
   pendingDues,
   confirmedStock,
   todayLogs = [],

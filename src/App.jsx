@@ -3,7 +3,7 @@ import { Toast } from "./components/ui.jsx";
 import { AppShell } from "./components/AppShell.jsx";
 import { AppPage } from "./components/AppPage.jsx";
 import { AppModals } from "./components/AppModals.jsx";
-import { Login } from "./components/Login.jsx";
+import { Login } from "./components/login.jsx";
 import { useAppState } from "./hooks/useAppState.js";
 import { useAppHandlers } from "./hooks/useAppHandlers.js";
 import { useAuth } from "./hooks/useAuth.js";
@@ -40,6 +40,8 @@ export default function App() {
       today={state.today}
       onTabChange={state.setTab}
       onLogout={auth.logout}
+      loadErrors={state.loadErrors}
+      onRefresh={state.refresh}
       footer={footer}
     >
       <AppPage tab={state.tab} state={state} handlers={handlers} />

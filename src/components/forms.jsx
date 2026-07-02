@@ -1,6 +1,7 @@
 // ── forms.jsx ─────────────────────────────────────────────────────────────────
 import { fmt } from "../lib/utils.js";
 import { BLUE_L, BLUE } from "../lib/constants.js";
+import { useBusy } from "../hooks/useBusy.js";
 import {
   Modal,
   Field,
@@ -69,6 +70,7 @@ export function CustomerModal({
   onClose,
   products,
 }) {
+  const [busy, save] = useBusy(onSave);
   return (
     <Modal title={getCustomerModalTitle(isEdit)} onClose={onClose}>
       <Field label="Full Name *">
@@ -116,8 +118,10 @@ export function CustomerModal({
         />
       </Field>
       <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-        <Btn onClick={onSave}>{getCustomerModalButtonText(isEdit)}</Btn>
-        <Btn variant="secondary" onClick={onClose}>
+        <Btn onClick={save} disabled={busy}>
+          {busy ? "Saving..." : getCustomerModalButtonText(isEdit)}
+        </Btn>
+        <Btn variant="secondary" onClick={onClose} disabled={busy}>
           Cancel
         </Btn>
       </div>
@@ -259,6 +263,7 @@ export function ImportModal({
   brands,
   milkTypes,
 }) {
+  const [busy, save] = useBusy(onSave);
   const total = calculateImportTotal(form, data);
   return (
     <Modal
@@ -287,8 +292,10 @@ export function ImportModal({
       <ImportMetaFields data={data} form={form} onChange={onChange} />
       <ImportTotalDisplay total={total} />
       <div style={{ display: "flex", gap: 8 }}>
-        <Btn onClick={onSave}>{data.id ? "Update" : "Save Draft"}</Btn>
-        <Btn variant="secondary" onClick={onClose}>
+        <Btn onClick={save} disabled={busy}>
+          {busy ? "Saving..." : data.id ? "Update" : "Save Draft"}
+        </Btn>
+        <Btn variant="secondary" onClick={onClose} disabled={busy}>
           Cancel
         </Btn>
       </div>
@@ -306,6 +313,7 @@ export function PaymentModal({
   today,
   payModes,
 }) {
+  const [busy, save] = useBusy(onSave);
   return (
     <Modal title={"Record Payment — " + data.customer} onClose={onClose}>
       <div
@@ -358,10 +366,12 @@ export function PaymentModal({
         />
       </Field>
       <div style={{ display: "flex", gap: 8 }}>
-        <Btn onClick={onSave}>
-          Record {form?.payAmt ? fmt(form.payAmt) : ""}
+        <Btn onClick={save} disabled={busy}>
+          {busy
+            ? "Recording..."
+            : `Record ${form?.payAmt ? fmt(form.payAmt) : ""}`}
         </Btn>
-        <Btn variant="secondary" onClick={onClose}>
+        <Btn variant="secondary" onClick={onClose} disabled={busy}>
           Cancel
         </Btn>
       </div>
@@ -416,6 +426,7 @@ export function AdjustmentModal({
   today,
   customers,
 }) {
+  const [busy, save] = useBusy(onSave);
   return (
     <Modal title="Add Adjustment" onClose={onClose}>
       {/* FIX DUPLICATION: Reused shared component */}
@@ -444,8 +455,10 @@ export function AdjustmentModal({
         />
       </Field>
       <div style={{ display: "flex", gap: 8 }}>
-        <Btn onClick={onSave}>Save</Btn>
-        <Btn variant="secondary" onClick={onClose}>
+        <Btn onClick={save} disabled={busy}>
+          {busy ? "Saving..." : "Save"}
+        </Btn>
+        <Btn variant="secondary" onClick={onClose} disabled={busy}>
           Cancel
         </Btn>
       </div>
@@ -463,11 +476,14 @@ export function PauseModal({
   today,
   customers,
 }) {
+  const [busy, save] = useBusy(onSave);
+
   // Client-side guard: backend rejects endDate < startDate but the user
   // shouldn't have to round-trip to find out.
   const start = form?.startDate || data?.startDate;
   const end = form?.endDate;
-  const endError = end && start && end < start ? "End date can't be before start" : null;
+  const endError =
+    end && start && end < start ? "End date can't be before start" : null;
 
   return (
     <Modal title="Add Pause Period" onClose={onClose}>
@@ -504,8 +520,10 @@ export function PauseModal({
         />
       </Field>
       <div style={{ display: "flex", gap: 8 }}>
-        <Btn onClick={onSave} disabled={!!endError}>Save</Btn>
-        <Btn variant="secondary" onClick={onClose}>
+        <Btn onClick={save} disabled={busy || !!endError}>
+          {busy ? "Saving..." : "Save"}
+        </Btn>
+        <Btn variant="secondary" onClick={onClose} disabled={busy}>
           Cancel
         </Btn>
       </div>
@@ -515,6 +533,7 @@ export function PauseModal({
 
 // fallow-ignore-next-line complexity
 export function BrandModal({ form, onChange, onSave, onClose, milkTypes }) {
+  const [busy, save] = useBusy(onSave);
   return (
     <Modal title="Add Milk Brand" onClose={onClose}>
       <Field label="Brand Name *">
@@ -564,8 +583,10 @@ export function BrandModal({ form, onChange, onSave, onClose, milkTypes }) {
         />
       </Field>
       <div style={{ display: "flex", gap: 8 }}>
-        <Btn onClick={onSave}>Save</Btn>
-        <Btn variant="secondary" onClick={onClose}>
+        <Btn onClick={save} disabled={busy}>
+          {busy ? "Saving..." : "Save"}
+        </Btn>
+        <Btn variant="secondary" onClick={onClose} disabled={busy}>
           Cancel
         </Btn>
       </div>

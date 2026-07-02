@@ -3,18 +3,25 @@ import { useState, useRef, useEffect } from "react";
 
 const PIN_RE = /^\d{4}$/;
 
+// fallow-ignore-next-line complexity
 export function Login({ onLogin, loading, error }) {
   const [pin, setPin] = useState("");
   const [localError, setLocalError] = useState(null);
   const inputRef = useRef(null);
 
-  // When the server returns an auth error, wipe the input — same PIN + same
-  // server error message is a brute-force tell. Re-focus so the user can
-  // immediately try a different PIN.
-  useEffect(() => {
+    // Track previous error to clear state during render (avoids setState in useEffect)
+  const [prevError, setPrevError] = useState(error);
+  if (error !== prevError) {
+    setPrevError(error);
     if (error) {
       setPin("");
       setLocalError(null);
+    }
+  }
+
+  // DOM side-effects (like focusing) stay in useEffect
+  useEffect(() => {
+    if (error) {
       inputRef.current?.focus();
     }
   }, [error]);

@@ -16,7 +16,6 @@ export function useAppHandlers(state) {
     setImports,
     setLogs,
     setAdjustments,
-    setPauses,
     setBrands,
     toast$,
     closeModal,
@@ -346,7 +345,8 @@ export function useAppHandlers(state) {
           supplierName: f.supplier,
           supplierPhone: f.phone,
           defaultMilkType: f.defaultType,
-          ratePerLiter: f.rate !== undefined && f.rate !== "" ? Number(f.rate) : undefined,
+          ratePerLiter:
+            f.rate !== undefined && f.rate !== "" ? Number(f.rate) : undefined,
           idempotencyKey: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
         });
         setBrands((prev) => [
