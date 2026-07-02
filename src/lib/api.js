@@ -83,6 +83,19 @@ export function mapBrandFromApi(b) {
   };
 }
 
+export function mapSubscriptionFromApi(s) {
+  return {
+    id: s.id || "",
+    customerId: s.customerId || "",
+    customerName: s.customerName || "Unknown Customer",
+    milkType: s.milkType || "FULL_CREAM",
+    quantity: Number(s.quantity) || 0,
+    deliveryDays: Array.isArray(s.deliveryDays) ? s.deliveryDays : [],
+    isActive: s.isActive === true || s.isActive === "TRUE",
+    version: Number(s.version) || 1,
+  };
+}
+
 // --- REQUEST MAPPERS (Frontend -> Backend) ---
 
 // Safe ID generation: completely avoids crypto.randomUUID issues in jsdom/test environments

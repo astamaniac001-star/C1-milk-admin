@@ -25,9 +25,18 @@ export default function Customers({
       <Section
         title="Customers"
         action={
-          <Btn small onClick={() => onOpenModal("addCustomer")}>
-            + Add
-          </Btn>
+          <div style={{ display: "flex", gap: 6 }}>
+            <Btn
+              small
+              variant="secondary"
+              onClick={() => onOpenModal("subscriptionsList")}
+            >
+              Subscriptions
+            </Btn>
+            <Btn small onClick={() => onOpenModal("addCustomer")}>
+              + Add
+            </Btn>
+          </div>
         }
       />
       <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>

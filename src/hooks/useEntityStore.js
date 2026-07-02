@@ -8,6 +8,7 @@ import {
   mapAdjustmentFromApi,
   mapPauseFromApi,
   mapBrandFromApi,
+  mapSubscriptionFromApi,
 } from "../lib/api.js";
 import { getToday } from "../lib/utils.js";
 
@@ -20,6 +21,7 @@ export function useEntityStore() {
   const [adjustments, setAdjustments] = useState([]);
   const [pauses, setPauses] = useState([]);
   const [brands, setBrands] = useState([]);
+  const [subscriptions, setSubscriptions] = useState([]);
   const [loadErrors, setLoadErrors] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -43,15 +45,17 @@ export function useEntityStore() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const [custs, bils, imps, lgs, adjs, paus, brnds] = await Promise.all([
-        safeFetch("getCustomers", {}, "customers"),
-        safeFetch("getBills", {}, "bills"),
-        safeFetch("getMilkImports", {}, "imports"),
-        safeFetch("getDailyLogs", { date: getToday() }, "logs"),
-        safeFetch("getAdjustments", {}, "adjustments"),
-        safeFetch("getPauses", {}, "pauses"),
-        safeFetch("getBrands", {}, "brands"),
-      ]);
+      const [custs, bils, imps, lgs, adjs, paus, brnds, subs] =
+        await Promise.all([
+          safeFetch("getCustomers", {}, "customers"),
+          safeFetch("getBills", {}, "bills"),
+          safeFetch("getMilkImports", {}, "imports"),
+          safeFetch("getDailyLogs", { date: getToday() }, "logs"),
+          safeFetch("getAdjustments", {}, "adjustments"),
+          safeFetch("getPauses", {}, "pauses"),
+          safeFetch("getBrands", {}, "brands"),
+          safeFetch("getSubscriptions", {}, "subscriptions"),
+        ]);
 
       setCustomers(custs.map(mapCustomerFromApi));
       setBills(bils.map(mapBillFromApi));
@@ -60,6 +64,7 @@ export function useEntityStore() {
       setAdjustments(adjs.map(mapAdjustmentFromApi));
       setPauses(paus.map(mapPauseFromApi));
       setBrands(brnds.map(mapBrandFromApi));
+      setSubscriptions(subs.map(mapSubscriptionFromApi));
     };
     fetchData();
   }, [safeFetch, refreshKey]);
@@ -88,6 +93,8 @@ export function useEntityStore() {
     setPauses,
     brands,
     setBrands,
+    subscriptions,
+    setSubscriptions,
     fetchLogs,
     loadErrors,
     refresh,

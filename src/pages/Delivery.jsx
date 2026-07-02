@@ -1,7 +1,7 @@
 // ── Delivery.jsx ──────────────────────────────────────────────────────────────
 // Daily Delivery tab: pick a date, see scheduled + done counts, toggle each
 // entry's delivered/skipped state.
-
+import { useBusy } from "../hooks/useBusy.js";
 import {
   Card,
   Field,
@@ -10,6 +10,7 @@ import {
   StatGrid,
   Empty,
   Badge,
+  Btn, // 👈 Added Btn import for the automation button
 } from "../components/ui.jsx";
 import { useEffect } from "react";
 
@@ -46,8 +47,10 @@ export default function Delivery({
   todayLogs,
   onToggleLog,
   fetchLogs,
+  generateDailyLogs,
 }) {
   const stats = calculateDeliveryStats(todayLogs);
+
   // Re-fetch logs whenever the user picks a new date
   useEffect(() => {
     if (logDate && fetchLogs) {
@@ -55,17 +58,59 @@ export default function Delivery({
     }
   }, [logDate, fetchLogs]);
 
+  // Wrap the generation function to track loading state and prevent double-clicks
+  const [busy, handleGenerate] = useBusy(async () => {
+    if (generateDailyLogs) {
+      await generateDailyLogs(logDate);
+    }
+  });
+
   return (
     <div>
       <Section title="Daily Delivery Log" />
-      <Field label="Select Date">
-        <input
-          type="date"
-          value={logDate}
-          onChange={(e) => onLogDateChange(e.target.value)}
-          style={IS()}
-        />
-      </Field>
+
+      {/* ── Date Picker & Generate Button Header ── */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-end",
+          marginBottom: 16,
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 150 }}>
+          <Field label="Select Date">
+            <input
+              type="date"
+              value={logDate}
+              onChange={(e) => onLogDateChange(e.target.value)}
+              style={IS()}
+            />
+          </Field>
+        </div>
+
+        {/* 👇 THE NEW AUTOMATION BUTTON 👇 */}
+        <Btn
+          small
+          onClick={handleGenerate}
+          disabled={busy}
+          style={{
+            background: busy ? "#9ca3af" : "#059669", // Green to indicate creation
+            color: "#fff",
+            fontWeight: 600,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            marginBottom: 4, // Align baseline with the input field
+            whiteSpace: "nowrap",
+          }}
+        >
+          {busy ? "⏳ Generating..." : "⚡ Generate Deliveries"}
+        </Btn>
+      </div>
+
       <StatGrid
         items={[
           { label: "Scheduled", value: stats.scheduled, icon: "📋" },
@@ -86,6 +131,7 @@ export default function Delivery({
           { label: "Qty (L)", value: stats.totalLiters, icon: "🥛" },
         ]}
       />
+
       {todayLogs.length === 0 ? (
         <Empty msg="No deliveries scheduled for this date" />
       ) : (

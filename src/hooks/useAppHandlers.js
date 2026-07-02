@@ -8,6 +8,7 @@ import {
 } from "../lib/api.js";
 import { getToday } from "../lib/utils.js";
 
+// fallow-ignore-next-line complexity
 export function useAppHandlers(state) {
   const {
     customers,
@@ -17,6 +18,7 @@ export function useAppHandlers(state) {
     setLogs,
     setAdjustments,
     setBrands,
+    setSubscriptions,
     toast$,
     closeModal,
     form = {},
@@ -368,7 +370,80 @@ export function useAppHandlers(state) {
     [setBrands, showToast, closeModal, form, modal],
   );
 
-  // 7. Bill lifecycle — used by the Lock / Unlock buttons on the Billing tab
+  //7. ── SUBSCRIPTION HANDLERS ──────────────────────────────────────────────
+  const saveSubscription = useCallback(
+    async (data) => {
+      try {
+        const payload = { ...data };
+
+        // If editing, we must pass the expectedVersion for Optimistic Concurrency Control
+        if (data.id) {
+          payload.expectedVersion = data.version;
+        } else {
+          // If creating, pass an idempotencyKey to prevent duplicate network retries
+          payload.idempotencyKey = `sub-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        }
+
+        const res = await callApi("saveSubscription", payload);
+
+        if (data.id) {
+          // Update existing
+          setSubscriptions((prev) =>
+            prev.map((s) =>
+              s.id === data.id ? { ...s, ...data, version: res.newVersion } : s,
+            ),
+          );
+        } else {
+          // Append new
+          setSubscriptions((prev) => [
+            ...prev,
+            { ...data, id: res.id, version: res.newVersion },
+          ]);
+        }
+
+        showToast("Subscription saved", "success");
+        if (closeModal) closeModal();
+      } catch (err) {
+        showToast(err.message || "Failed to save subscription", "error");
+      }
+    },
+    [setSubscriptions, showToast, closeModal],
+  );
+
+  const generateDailyLogs = useCallback(
+    async (date) => {
+      try {
+        // Generate a unique idempotency key for this batch run
+        const idempotencyKey = `gen-logs-${date}-${Date.now()}`;
+        const summary = await callApi("generateDailyLogsForDate", {
+          date,
+          idempotencyKey,
+        });
+
+        // Show a detailed toast based on the backend summary
+        const skipped =
+          (summary.skippedExisting || 0) +
+          (summary.skippedPaused || 0) +
+          (summary.skippedWrongDay || 0) +
+          (summary.skippedInactiveCust || 0);
+
+        showToast(
+          `Generated ${summary.created} logs. Skipped ${skipped}.`,
+          summary.created > 0 ? "success" : "info",
+        );
+
+        // Crucial: Refetch the logs for that specific date so the Delivery UI updates immediately
+        if (state.fetchLogs) {
+          await state.fetchLogs(date);
+        }
+      } catch (err) {
+        showToast(err.message || "Failed to generate logs", "error");
+      }
+    },
+    [showToast, state],
+  );
+
+  // 8. Bill lifecycle — used by the Lock / Unlock buttons on the Billing tab
   const lockBill = useCallback(
     async (billId) => {
       try {
@@ -399,7 +474,7 @@ export function useAppHandlers(state) {
     [setBills, showToast],
   );
 
-  // 8. WhatsApp share — fetches the bill text and opens wa.me in a new tab.
+  // 9. WhatsApp share — fetches the bill text and opens wa.me in a new tab.
   //    Falls back to a plain text message if getBillText fails so the link is
   //    always usable even when the network is flaky.
   const whatsapp = useCallback(
@@ -424,6 +499,7 @@ export function useAppHandlers(state) {
         }
       }
       const url = `https://wa.me/${intlPhone}?text=${encodeURIComponent(text)}`;
+      // cspell:disable-next-line
       window.open(url, "_blank", "noopener,noreferrer");
     },
     [showToast],
@@ -443,6 +519,8 @@ export function useAppHandlers(state) {
       lockBill,
       unlockBill,
       whatsapp,
+      saveSubscription,
+      generateDailyLogs,
     }),
     [
       customerHandlers,
@@ -457,6 +535,8 @@ export function useAppHandlers(state) {
       lockBill,
       unlockBill,
       whatsapp,
+      saveSubscription,
+      generateDailyLogs,
     ],
   );
 }

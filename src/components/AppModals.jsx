@@ -7,12 +7,15 @@ import {
   AdjustmentModal,
   PauseModal,
   BrandModal,
+  SubscriptionModal,
+  SubscriptionsListModal,
 } from "./forms.jsx";
 
 function renderCustomerModal(ctx, isEdit) {
   return (
     <CustomerModal
       data={ctx.modal.data}
+      form={ctx.form}
       isEdit={isEdit}
       onChange={ctx.setF}
       onSave={ctx.handlers.saveCustomer}
@@ -55,6 +58,7 @@ function renderAdjustmentModal(ctx) {
   return (
     <AdjustmentModal
       data={ctx.modal.data}
+      form={ctx.form}
       onChange={ctx.setF}
       onSave={ctx.handlers.saveAdjustment}
       onClose={ctx.closeModal}
@@ -68,11 +72,32 @@ function renderPauseModal(ctx) {
   return (
     <PauseModal
       data={ctx.modal.data}
+      form={ctx.form}
       onChange={ctx.setF}
       onSave={ctx.handlers.savePause}
       onClose={ctx.closeModal}
       today={ctx.today}
       customers={ctx.customers}
+    />
+  );
+}
+
+function renderSubscriptionModal(ctx) {
+  return (
+    <SubscriptionModal
+      data={ctx.modal.data}
+      form={ctx.form}
+      onChange={ctx.setF}
+      // Merge form data with ID/Version for Optimistic Concurrency Control if editing
+      onSave={() =>
+        ctx.handlers.saveSubscription({
+          ...ctx.form,
+          id: ctx.modal.data?.id,
+          version: ctx.modal.data?.version,
+        })
+      }
+      onClose={ctx.closeModal}
+      customers={ctx.customers || []}
     />
   );
 }
@@ -89,12 +114,43 @@ const MODAL_RENDERERS = {
   addPause: renderPauseModal,
   addBrand: (ctx) => (
     <BrandModal
+      form={ctx.form}
       onChange={ctx.setF}
       onSave={ctx.handlers.saveBrand}
       onClose={ctx.closeModal}
       milkTypes={MILK_TYPES}
     />
   ),
+
+  // ── SUBSCRIPTION MODALS ────────────────────────────────────────────────
+  subscriptionsList: (ctx) => (
+    <SubscriptionsListModal
+      subscriptions={ctx.subscriptions || []}
+      // fallow-ignore-next-line complexity
+      onEdit={(sub) => {
+        // Initialize form with defaults for new, or existing data for edit
+        if (ctx.setForm) {
+          ctx.setForm(
+            sub
+              ? { ...sub }
+              : {
+                  isActive: true,
+                  deliveryDays: [1, 2, 3, 4, 5],
+                  quantity: 1,
+                  milkType: "FULL_CREAM",
+                },
+          );
+        }
+        // Open the correct modal type
+        if (ctx.openModal) {
+          ctx.openModal(sub ? "editSubscription" : "addSubscription");
+        }
+      }}
+      onClose={ctx.closeModal}
+    />
+  ),
+  addSubscription: renderSubscriptionModal,
+  editSubscription: renderSubscriptionModal,
 };
 
 export function AppModals(props) {

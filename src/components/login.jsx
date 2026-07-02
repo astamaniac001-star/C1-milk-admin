@@ -9,7 +9,7 @@ export function Login({ onLogin, loading, error }) {
   const [localError, setLocalError] = useState(null);
   const inputRef = useRef(null);
 
-    // Track previous error to clear state during render (avoids setState in useEffect)
+  // Track previous error to clear state during render (avoids setState in useEffect)
   const [prevError, setPrevError] = useState(error);
   if (error !== prevError) {
     setPrevError(error);
@@ -73,10 +73,7 @@ export function Login({ onLogin, loading, error }) {
         }}
         noValidate
       >
-        <label
-          htmlFor="pin-input"
-          style={{ fontSize: 12, color: "#6b7280" }}
-        >
+        <label htmlFor="pin-input" style={{ fontSize: 12, color: "#6b7280" }}>
           PIN
         </label>
         <input

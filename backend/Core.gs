@@ -687,6 +687,10 @@ function purgeSystemState() {
 // ----------------------------------------------------------------------------
 
 const ALLOWED_ACTIONS = new Set([
+  //Subscriptions
+  "getSubscriptions",
+  "saveSubscription",
+  "generateDailyLogsForDate",
   // Customers
   "addCustomer",
   "updateCustomer",
@@ -861,6 +865,12 @@ function doPost(e) {
   // resolve to the implementations defined in Part 5 (Admin.gs).
   try {
     switch (action) {
+      case "getSubscriptions":
+        return getSubscriptions(payload);
+      case "saveSubscription":
+        return saveSubscription(payload);
+      case "generateDailyLogsForDate":
+        return generateDailyLogsForDate(payload);
       case "addCustomer":
         return addCustomer(payload);
       case "updateCustomer":
@@ -1015,6 +1025,7 @@ function batchFlush(payload) {
 
   // Explicit allowlist — no eval, no reflection.
   var DISPATCH = {
+    saveSubscription: saveSubscription,
     addCustomer: addCustomer,
     updateCustomer: updateCustomer,
     deactivateCustomer: deactivateCustomer,

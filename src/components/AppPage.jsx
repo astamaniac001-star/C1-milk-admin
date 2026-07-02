@@ -48,6 +48,7 @@ function renderDelivery(state, handlers) {
       todayLogs={state.todayLogs}
       onToggleLog={handlers.toggleDeliveryLog}
       fetchLogs={state.fetchLogs}
+      generateDailyLogs={handlers.generateDailyLogs}
     />
   );
 }
