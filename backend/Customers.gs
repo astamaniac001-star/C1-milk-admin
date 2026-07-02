@@ -684,7 +684,9 @@ function getDailyLogs(payload) {
 // function declaration crash at Apps Script deployment time.
 
 function getPauses() {
-  const sheet = getSheet("Pauses");
+  // BUGFIX: was getSheet("Pauses") which doesn't match SHEET_NAMES.PAUSE_PERIODS
+  // ("PausePeriods") and threw 'Sheet not found: Pauses' on first call.
+  const sheet = getSheet(SHEET_NAMES.PAUSE_PERIODS);
   const data = sheet.getDataRange().getValues();
   if (data.length < 2) return { success: true, data: { pauses: [] } };
   const headers = data[0];

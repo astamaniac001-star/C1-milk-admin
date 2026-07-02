@@ -11,7 +11,7 @@ import { useAuth } from "./hooks/useAuth.js";
 export default function App() {
   // 1. ALL HOOKS MUST BE CALLED UNCONDITIONALLY AT THE VERY TOP
   const auth = useAuth();
-  const state = useAppState(auth.token);
+  const state = useAppState();
   const handlers = useAppHandlers(state); // <--- MUST BE HERE
 
   // 2. NOW we can do conditional returns
@@ -38,8 +38,8 @@ export default function App() {
     <AppShell
       tab={state.tab}
       today={state.today}
-      queue={state.queue}
       onTabChange={state.setTab}
+      onLogout={auth.logout}
       footer={footer}
     >
       <AppPage tab={state.tab} state={state} handlers={handlers} />

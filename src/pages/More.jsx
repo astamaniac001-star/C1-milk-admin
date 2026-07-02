@@ -72,7 +72,32 @@ function AdjustmentActions({ applied, onApply }) {
   );
 }
 
-function AdjustmentItem({ a, onApplyAdj }) {
+function buildAdjusterResolver(customers, bills) {
+  const customerById = new Map();
+  for (const c of customers || []) customerById.set(c.id, c);
+  const customerByBill = new Map();
+  for (const b of bills || []) {
+    if (b && b.custId && b.id) customerByBill.set(b.id, b.custId);
+  }
+  return {
+    customerNameById(id) {
+      return (id && customerById.get(id)?.name) || "Unknown Customer";
+    },
+    customerNameForAdjustment(adj) {
+      // Adjustments reference a billId (when applied) or a customerId directly
+      // (when unapplied). Try both, then fall back to unknown.
+      if (adj?.billId && customerByBill.has(adj.billId)) {
+        const cid = customerByBill.get(adj.billId);
+        return this.customerNameById(cid);
+      }
+      if (adj?.customerId) return this.customerNameById(adj.customerId);
+      if (adj?.custId) return this.customerNameById(adj.custId);
+      return "Unknown Customer";
+    },
+  };
+}
+
+function AdjustmentItem({ a, onApplyAdj, resolveCustomer }) {
   return (
     <div
       key={a.id}
@@ -87,7 +112,7 @@ function AdjustmentItem({ a, onApplyAdj }) {
       >
         <div>
           <div style={{ fontSize: 13, fontWeight: 500, color: "#111" }}>
-            {a.customer}
+            {resolveCustomer.customerNameForAdjustment(a)}
           </div>
           <div style={{ fontSize: 12, color: "#6b7280" }}>
             {a.date} · {a.reason}
@@ -95,7 +120,7 @@ function AdjustmentItem({ a, onApplyAdj }) {
           <AdjustmentAmount amount={a.amount} />
         </div>
         <AdjustmentActions
-          applied={a.applied}
+          applied={!!a.applied}
           onApply={() => onApplyAdj(a.id)}
         />
       </div>
@@ -103,7 +128,7 @@ function AdjustmentItem({ a, onApplyAdj }) {
   );
 }
 
-function AdjustmentsCard({ adjustments, onOpenModal, onApplyAdj }) {
+function AdjustmentsCard({ adjustments, onOpenModal, onApplyAdj, resolveCustomer }) {
   return (
     <Card>
       <CardHeader
@@ -118,14 +143,19 @@ function AdjustmentsCard({ adjustments, onOpenModal, onApplyAdj }) {
         <Empty msg="No adjustments" />
       ) : (
         adjustments.map((a) => (
-          <AdjustmentItem key={a.id} a={a} onApplyAdj={onApplyAdj} />
+          <AdjustmentItem
+            key={a.id}
+            a={a}
+            onApplyAdj={onApplyAdj}
+            resolveCustomer={resolveCustomer}
+          />
         ))
       )}
     </Card>
   );
 }
 
-function PausePeriodsCard({ pauses, onOpenModal }) {
+function PausePeriodsCard({ pauses, onOpenModal, resolveCustomer }) {
   return (
     <Card>
       <CardHeader
@@ -145,10 +175,10 @@ function PausePeriodsCard({ pauses, onOpenModal }) {
             style={{ padding: "8px 0", borderBottom: "0.5px solid #f3f4f6" }}
           >
             <div style={{ fontSize: 13, fontWeight: 500, color: "#111" }}>
-              {p.customer}
+              {resolveCustomer.customerNameById(p.custId)}
             </div>
             <div style={{ fontSize: 12, color: "#6b7280" }}>
-              {p.startDate} → {p.endDate}
+              {p.start} → {p.end || "open"}
             </div>
             {p.reason && (
               <div style={{ fontSize: 12, color: "#9ca3af" }}>{p.reason}</div>
@@ -273,9 +303,11 @@ function resolveDiagnostics(activeBrandsCount, brands) {
 }
 
 export default function More({
-  adjustments,
-  pauses,
-  brands,
+  adjustments = [],
+  pauses = [],
+  brands = [],
+  customers = [],
+  bills = [],
   diagRan,
   activeBrandsCount,
   onOpenModal,
@@ -284,6 +316,7 @@ export default function More({
   onHealthCheck,
 }) {
   const diagnostics = resolveDiagnostics(activeBrandsCount, brands);
+  const resolveCustomer = buildAdjusterResolver(customers, bills);
 
   return (
     <div>
@@ -292,8 +325,13 @@ export default function More({
         adjustments={adjustments}
         onOpenModal={onOpenModal}
         onApplyAdj={onApplyAdj}
+        resolveCustomer={resolveCustomer}
       />
-      <PausePeriodsCard pauses={pauses} onOpenModal={onOpenModal} />
+      <PausePeriodsCard
+        pauses={pauses}
+        onOpenModal={onOpenModal}
+        resolveCustomer={resolveCustomer}
+      />
       <DiagnosticsCard
         diagRan={diagRan}
         diagnostics={diagnostics}

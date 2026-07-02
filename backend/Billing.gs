@@ -843,7 +843,9 @@ function getBillText(payload) {
 }
 
 function getAdjustments() {
-  const sheet = getSheet("Adjustments");
+  // Hardened: go through SHEET_NAMES instead of literal "Adjustments" so a
+  // future rename of the sheet can't silently break this read action.
+  const sheet = getSheet(SHEET_NAMES.ADJUSTMENTS);
   const data = sheet.getDataRange().getValues();
   if (data.length < 2) return { success: true, data: { adjustments: [] } };
   const headers = data[0];

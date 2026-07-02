@@ -13,11 +13,12 @@ function renderDashboard(state, handlers) {
       totalRevenue={state.totalRevenue}
       pendingDues={state.pendingDues}
       confirmedStock={state.confirmedStock}
-      logs={state.logs}
-      bills={state.bills} // Changed todayLogs -> logs, removed queue
+      todayLogs={state.todayLogs}
+      bills={state.bills}
+      customers={state.customers}
       onSetTab={state.setTab}
       onOpenModal={state.openModal}
-      onGenerateBill={handlers.generateMonthlyBills} // Fixed handler name to match Phase 2
+      onGenerateBill={handlers.generateMonthlyBills}
     />
   );
 }
@@ -44,9 +45,9 @@ function renderDelivery(state, handlers) {
     <Delivery
       logDate={state.logDate}
       onLogDateChange={state.setLogDate}
-      logs={state.logs} // Changed todayLogs -> logs
-      onToggleLog={handlers.toggleDeliveryLog} // Fixed handler name to match Phase 2
-      fetchLogs={state.fetchLogs} // Added to support the Gap 1 date picker fix
+      todayLogs={state.todayLogs}
+      onToggleLog={handlers.toggleDeliveryLog}
+      fetchLogs={state.fetchLogs}
     />
   );
 }
@@ -91,6 +92,8 @@ function renderMore(state, handlers) {
       adjustments={state.adjustments}
       pauses={state.pauses}
       brands={state.brands}
+      customers={state.customers}
+      bills={state.bills}
       diagRan={state.diagRan}
       activeBrandsCount={state.activeBrandsCount}
       onOpenModal={state.openModal}

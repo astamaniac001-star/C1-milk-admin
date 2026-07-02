@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   callApi,
   mapCustomerFromApi,
@@ -11,7 +11,10 @@ import {
 } from "../lib/api.js";
 import { getToday } from "../lib/utils.js";
 
-export function useEntityStore() {
+export function useEntityStore(_token) {
+  // _token intentionally unused: kept in the signature to make the dependency
+  // on auth explicit at the App.jsx layer; future code may want to scope the
+  // fetch to the current session.
   // 1. Initialize with empty arrays (Fixes fatal build error)
   const [customers, setCustomers] = useState([]);
   const [imports, setImports] = useState([]);
@@ -21,16 +24,24 @@ export function useEntityStore() {
   const [pauses, setPauses] = useState([]);
   const [brands, setBrands] = useState([]);
 
-  // Helper to safely fetch data and return an empty array on failure.
-  // This removes 7 try/catch blocks from the main function, dropping complexity.
-  const safeFetch = async (action, payload, fallbackKey) => {
+  // Tracks which fetches failed so we can surface a single "partial load"
+  // hint instead of silently rendering empty arrays when the backend is down.
+  const failedActionsRef = useRef(new Set());
+  const failedActions = Array.from(failedActionsRef.current);
+
+  // Helper to safely fetch data. On failure: log + record on failedActionsRef
+  // + return empty array (still allows the rest of the dashboard to render).
+  const safeFetch = useCallback(async (action, payload, fallbackKey) => {
     try {
       const res = await callApi(action, payload);
       return res[fallbackKey] || [];
-    } catch {
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(`[useEntityStore] ${action} failed:`, err.message);
+      failedActionsRef.current.add(action);
       return [];
     }
-  };
+  }, []);
 
   // 2. Fetch real data from backend on mount
   useEffect(() => {
@@ -56,18 +67,20 @@ export function useEntityStore() {
     };
 
     fetchData();
-  }, []);
+  }, [safeFetch]);
 
-  // Fix Gap 1: Expose a function to re-fetch logs when the user changes the date in the Delivery tab
-  const fetchLogs = async (date) => {
+  // Fix Gap 1: Expose a function to re-fetch logs when the user changes the date in the Delivery tab.
+  // useCallback (stable identity) so Delivery's useEffect doesn't re-fire on every render.
+  // On failure: keep prior data and log — don't wipe the user's view on a transient blip.
+  const fetchLogs = useCallback(async (date) => {
     try {
       const res = await callApi("getDailyLogs", { date });
       setLogs((res.logs || []).map(mapLogFromApi));
     } catch (err) {
       console.error("Failed to fetch logs for date:", date, err);
-      setLogs([]);
+      // intentional: do not call setLogs here — the previous logs remain visible.
     }
-  };
+  }, []);
 
   // Note: 'queue' and 'setQueue' have been completely removed (Phase 3 Dead Code Cleanup)
   return {
@@ -86,6 +99,7 @@ export function useEntityStore() {
     brands,
     setBrands,
     fetchLogs, // Exposed for the Delivery tab date picker
+    loadErrors: failedActions, // Actions that failed on the last bulk fetch
   };
 }
 

@@ -15,11 +15,17 @@ const QUICK_ACTIONS = [
   { label: "Add Brand", icon: "🏷️", type: "addBrand" },
 ];
 
-const QUEUE_STATS = [
-  { label: "Pending", st: "pending", bg: "#dbeafe", tx: "#1e40af" },
-  { label: "Failed", st: "failed", bg: "#fef9c3", tx: "#854d0e" },
-  { label: "Dead", st: "dead", bg: "#fee2e2", tx: "#991b1b" },
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
+
+function monthLabel(YYYYMM) {
+  if (!YYYYMM || typeof YYYYMM !== "string" || YYYYMM.length < 7) return YYYYMM;
+  const monthIdx = Number(YYYYMM.substring(5, 7)) - 1;
+  if (Number.isNaN(monthIdx) || monthIdx < 0 || monthIdx > 11) return YYYYMM;
+  return MONTH_NAMES[monthIdx];
+}
 
 export default function Dashboard({
   today,
@@ -27,14 +33,27 @@ export default function Dashboard({
   totalRevenue,
   pendingDues,
   confirmedStock,
-  todayLogs,
-  queue,
-  bills,
+  todayLogs = [],
+  bills = [],
+  customers = [],
   onSetTab,
   onOpenModal,
   onGenerateBill,
 }) {
-  const deadCount = queue.filter((q) => q.status === "dead").length;
+  // The previous version of this tile said "Revenue Jan" while summing paid
+  // bills across ALL months — label was a lie. Now scoped to the calendar
+  // month of `today` so the number and label always agree.
+  const currentMonth = (today || "").substring(0, 7);
+  const monthRevenue = bills
+    .filter((b) => b.month === currentMonth && b.status === "Paid")
+    .reduce((s, b) => s + (b.paid || 0), 0);
+
+  // bill.custId → customer.name lookup so Recent Bills can show who paid.
+  const customerName = (() => {
+    const m = new Map();
+    for (const c of customers) m.set(c.id, c.name);
+    return (id) => m.get(id) || "Unknown Customer";
+  })();
 
   return (
     <div>
@@ -47,8 +66,8 @@ export default function Dashboard({
             icon: "🥛",
           },
           {
-            label: "Revenue Jan",
-            value: fmt(totalRevenue),
+            label: `Revenue ${monthLabel(currentMonth)}`,
+            value: fmt(monthRevenue),
             icon: "💰",
             bg: "#dcfce7",
             tx: "#166534",
@@ -163,73 +182,6 @@ export default function Dashboard({
             fontWeight: 600,
             fontSize: 13,
             color: "#111",
-            marginBottom: 10,
-          }}
-        >
-          Write Queue (demo only)
-        </div>
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            marginBottom: deadCount > 0 ? 10 : 0,
-          }}
-        >
-          {QUEUE_STATS.map((s) => (
-            <div
-              key={s.label}
-              style={{
-                flex: 1,
-                background: s.bg,
-                borderRadius: 8,
-                padding: "8px 0",
-                textAlign: "center",
-              }}
-            >
-              <div style={{ fontSize: 20, fontWeight: 700, color: s.tx }}>
-                {queue.filter((q) => q.status === s.st).length}
-              </div>
-              <div style={{ fontSize: 11, color: s.tx }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-        {deadCount > 0 && (
-          <div
-            style={{
-              background: "#fee2e2",
-              borderRadius: 8,
-              padding: "8px 10px",
-              fontSize: 12,
-              color: "#991b1b",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <span>⚠ {deadCount} dead write(s)</span>
-            <button
-              onClick={() => onSetTab("more")}
-              style={{
-                background: "none",
-                border: "none",
-                color: "#991b1b",
-                fontWeight: 600,
-                cursor: "pointer",
-                fontSize: 12,
-              }}
-            >
-              View →
-            </button>
-          </div>
-        )}
-      </Card>
-
-      <Card>
-        <div
-          style={{
-            fontWeight: 600,
-            fontSize: 13,
-            color: "#111",
             marginBottom: 8,
           }}
         >
@@ -248,7 +200,7 @@ export default function Dashboard({
           >
             <div>
               <div style={{ fontSize: 13, fontWeight: 500, color: "#111" }}>
-                {b.customer}
+                {customerName(b.custId)}
               </div>
               <div style={{ fontSize: 11, color: "#6b7280" }}>{b.month}</div>
             </div>

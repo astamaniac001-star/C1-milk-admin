@@ -18,24 +18,6 @@ const TAB_TITLES = {
   more: "More",
 };
 
-function TabBadge({ show }) {
-  if (!show) return null;
-  return (
-    <span
-      style={{
-        position: "absolute",
-        top: 6,
-        right: "20%",
-        width: 7,
-        height: 7,
-        background: "#ef4444",
-        borderRadius: "50%",
-        display: "block",
-      }}
-    />
-  );
-}
-
 function getTabLabelStyle(isActive) {
   return {
     fontSize: 10,
@@ -56,7 +38,7 @@ function getActiveIndicatorStyle() {
   };
 }
 
-function TabButton({ tab, active, deadCount, onSelect }) {
+function TabButton({ tab, active, onSelect }) {
   const isActive = tab === active;
   return (
     <button
@@ -75,7 +57,6 @@ function TabButton({ tab, active, deadCount, onSelect }) {
         position: "relative",
       }}
     >
-      <TabBadge show={tab.id === "more" && deadCount > 0} />
       <span style={{ fontSize: 17 }}>{tab.icon}</span>
       <span style={getTabLabelStyle(isActive)}>{tab.label}</span>
       {isActive && <span style={getActiveIndicatorStyle()} />}
@@ -83,9 +64,7 @@ function TabButton({ tab, active, deadCount, onSelect }) {
   );
 }
 
-export function AppShell({ tab, today, queue, onTabChange, children, footer }) {
-  const deadCount = queue.filter((q) => q.status === "dead").length;
-
+export function AppShell({ tab, today, onTabChange, onLogout, children, footer }) {
   return (
     <div
       style={{
@@ -141,6 +120,26 @@ export function AppShell({ tab, today, queue, onTabChange, children, footer }) {
             />
             Online
           </div>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              title="Sign out"
+              style={{
+                marginTop: 6,
+                background: "rgba(255,255,255,0.15)",
+                color: "#fff",
+                border: "0.5px solid rgba(255,255,255,0.35)",
+                borderRadius: 6,
+                padding: "3px 8px",
+                fontSize: 10,
+                fontWeight: 600,
+                cursor: "pointer",
+                letterSpacing: 0.3,
+              }}
+            >
+              SIGN OUT
+            </button>
+          )}
         </div>
       </div>
 
@@ -161,13 +160,7 @@ export function AppShell({ tab, today, queue, onTabChange, children, footer }) {
         }}
       >
         {TABS.map((t) => (
-          <TabButton
-            key={t.id}
-            tab={t}
-            active={tab}
-            deadCount={deadCount}
-            onSelect={onTabChange}
-          />
+          <TabButton key={t.id} tab={t} active={tab} onSelect={onTabChange} />
         ))}
       </div>
 

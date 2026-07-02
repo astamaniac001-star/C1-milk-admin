@@ -128,9 +128,29 @@ export function mapPaymentToApi(billId, amount) {
 
 // --- API CLIENT ---
 
+// Read tokens from sessionStorage (matches useAuth.js). Falling back to
+// localStorage lets us read any tokens set by previous app versions before
+// the user logs out and back in — they get carried forward without a forced
+// re-auth on first request after the upgrade.
+function readToken() {
+  return sessionStorage.getItem("token") || localStorage.getItem("token");
+}
+function readSecret() {
+  return (
+    sessionStorage.getItem("sessionSecret") ||
+    localStorage.getItem("sessionSecret")
+  );
+}
+function clearTokens() {
+  sessionStorage.removeItem("token");
+  sessionStorage.removeItem("sessionSecret");
+  localStorage.removeItem("token");
+  localStorage.removeItem("sessionSecret");
+}
+
 export async function callApi(action, payload = {}) {
-  const token = localStorage.getItem("token");
-  const sessionSecret = localStorage.getItem("sessionSecret");
+  const token = readToken();
+  const sessionSecret = readSecret();
 
   const body = { action, payload };
   if (token) body.token = token;
@@ -153,8 +173,7 @@ export async function callApi(action, payload = {}) {
         errorCode === "SESSION_EXPIRED" ||
         errorCode === "INVALID_TOKEN"
       ) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("sessionSecret");
+        clearTokens();
         window.location.reload();
       }
       throw new Error(result.error?.message || "Unknown API error");

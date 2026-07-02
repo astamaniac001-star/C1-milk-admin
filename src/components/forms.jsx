@@ -463,6 +463,12 @@ export function PauseModal({
   today,
   customers,
 }) {
+  // Client-side guard: backend rejects endDate < startDate but the user
+  // shouldn't have to round-trip to find out.
+  const start = form?.startDate || data?.startDate;
+  const end = form?.endDate;
+  const endError = end && start && end < start ? "End date can't be before start" : null;
+
   return (
     <Modal title="Add Pause Period" onClose={onClose}>
       {/* FIX DUPLICATION: Reused shared component */}
@@ -478,10 +484,16 @@ export function PauseModal({
       <Field label="End Date *">
         <input
           type="date"
+          min={start || undefined}
           style={IS()}
           value={form?.endDate ?? ""}
           onChange={onChange("endDate")}
         />
+        {endError && (
+          <div style={{ fontSize: 11, color: "#991b1b", marginTop: 4 }}>
+            {endError}
+          </div>
+        )}
       </Field>
       <Field label="Reason">
         <input
@@ -492,7 +504,7 @@ export function PauseModal({
         />
       </Field>
       <div style={{ display: "flex", gap: 8 }}>
-        <Btn onClick={onSave}>Save</Btn>
+        <Btn onClick={onSave} disabled={!!endError}>Save</Btn>
         <Btn variant="secondary" onClick={onClose}>
           Cancel
         </Btn>

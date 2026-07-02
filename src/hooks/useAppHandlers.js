@@ -16,6 +16,8 @@ export function useAppHandlers(state) {
     setImports,
     setLogs,
     setAdjustments,
+    setPauses,
+    setBrands,
     toast$,
     closeModal,
     form = {},
@@ -284,6 +286,149 @@ export function useAppHandlers(state) {
     [showToast, closeModal],
   );
 
+  // 6. Dispatch helpers — modal Save buttons funnel through these so the
+  //    modal layer doesn't need to know whether something is create vs edit.
+  const saveCustomer = useCallback(
+    async (formArg) => {
+      const f = formArg || form;
+      if (!f) return;
+      if (f.id) {
+        return customerHandlers.updateCustomer(f);
+      }
+      return customerHandlers.addCustomer(f);
+    },
+    [customerHandlers, form],
+  );
+
+  const saveImport = useCallback(
+    async (formArg) => {
+      const f = formArg || form;
+      if (!f) return;
+      if (f.id) {
+        return importHandlers.updateMilkImport(f);
+      }
+      return importHandlers.addMilkImport(f);
+    },
+    [importHandlers, form],
+  );
+
+  const savePause = useCallback(
+    async (formArg) => {
+      const f = formArg || form;
+      if (!f) return;
+      return adminHandlers.addPause(
+        f.custId || modal.data?.custId,
+        f.startDate,
+        f.endDate,
+        f.reason,
+      );
+    },
+    [adminHandlers, form, modal],
+  );
+
+  const saveBrand = useCallback(
+    async (formArg) => {
+      const f = formArg || form;
+      if (!f) return;
+      const brandName =
+        f.name ||
+        f.brandName ||
+        modal.data?.name ||
+        modal.data?.brandName ||
+        "";
+      if (!brandName || !String(brandName).trim()) {
+        showToast("Brand name is required", "error");
+        return;
+      }
+      try {
+        await callApi("addMilkBrand", {
+          brandName: brandName.trim(),
+          supplierName: f.supplier,
+          supplierPhone: f.phone,
+          defaultMilkType: f.defaultType,
+          ratePerLiter: f.rate !== undefined && f.rate !== "" ? Number(f.rate) : undefined,
+          idempotencyKey: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        });
+        setBrands((prev) => [
+          ...prev,
+          {
+            id: "BRAND-" + Date.now().toString(36).toUpperCase(),
+            name: brandName.trim(),
+            supplier: f.supplier || "",
+            phone: f.phone || "",
+            status: "Active",
+          },
+        ]);
+        showToast("Brand added", "success");
+        if (closeModal) closeModal();
+      } catch (err) {
+        showToast(err.message, "error");
+      }
+    },
+    [setBrands, showToast, closeModal, form, modal],
+  );
+
+  // 7. Bill lifecycle — used by the Lock / Unlock buttons on the Billing tab
+  const lockBill = useCallback(
+    async (billId) => {
+      try {
+        await callApi("lockBill", { billId });
+        setBills((prev) =>
+          prev.map((b) => (b.id === billId ? { ...b, locked: true } : b)),
+        );
+        showToast("Bill locked", "success");
+      } catch (err) {
+        showToast(err.message, "error");
+      }
+    },
+    [setBills, showToast],
+  );
+
+  const unlockBill = useCallback(
+    async (billId) => {
+      try {
+        await callApi("unlockBill", { billId });
+        setBills((prev) =>
+          prev.map((b) => (b.id === billId ? { ...b, locked: false } : b)),
+        );
+        showToast("Bill unlocked", "success");
+      } catch (err) {
+        showToast(err.message, "error");
+      }
+    },
+    [setBills, showToast],
+  );
+
+  // 8. WhatsApp share — fetches the bill text and opens wa.me in a new tab.
+  //    Falls back to a plain text message if getBillText fails so the link is
+  //    always usable even when the network is flaky.
+  const whatsapp = useCallback(
+    async (phone, billId) => {
+      if (!phone) {
+        showToast("No phone number on file", "error");
+        return;
+      }
+      const digits = String(phone).replace(/\D/g, "");
+      const intlPhone = digits.length === 10 ? "91" + digits : digits;
+      if (!intlPhone) {
+        showToast("Invalid phone number", "error");
+        return;
+      }
+      let text = `Pending milk bill — Bill ${billId}`;
+      if (billId) {
+        try {
+          const data = await callApi("getBillText", { billId });
+          if (data?.text) text = data.text;
+        } catch {
+          // keep the fallback text — wa.me link still works
+        }
+      }
+      const url = `https://wa.me/${intlPhone}?text=${encodeURIComponent(text)}`;
+      window.open(url, "_blank", "noopener,noreferrer");
+    },
+    [showToast],
+  );
+
   return useMemo(
     () => ({
       ...customerHandlers,
@@ -291,6 +436,13 @@ export function useAppHandlers(state) {
       ...importHandlers,
       ...deliveryHandlers,
       ...adminHandlers,
+      saveCustomer,
+      saveImport,
+      savePause,
+      saveBrand,
+      lockBill,
+      unlockBill,
+      whatsapp,
     }),
     [
       customerHandlers,
@@ -298,6 +450,13 @@ export function useAppHandlers(state) {
       importHandlers,
       deliveryHandlers,
       adminHandlers,
+      saveCustomer,
+      saveImport,
+      savePause,
+      saveBrand,
+      lockBill,
+      unlockBill,
+      whatsapp,
     ],
   );
 }

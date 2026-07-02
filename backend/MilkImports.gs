@@ -816,7 +816,8 @@ function getMilkTypes(payload) {
 }
 
 function getBrands() {
-  const sheet = getSheet("MilkBrands");
+  // Hardened: go through SHEET_NAMES instead of literal "MilkBrands".
+  const sheet = getSheet(SHEET_NAMES.MILK_BRANDS);
   const data = sheet.getDataRange().getValues();
   if (data.length < 2) return { success: true, data: { brands: [] } };
   const headers = data[0];
