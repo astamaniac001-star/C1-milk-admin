@@ -53,6 +53,7 @@ function renderPaymentModal(ctx) {
       onClose={ctx.closeModal}
       today={ctx.today}
       payModes={PAY_MODES}
+      customers={ctx.customers}
     />
   );
 }
@@ -111,7 +112,11 @@ const MODAL_RENDERERS = {
   addImport: renderImportModal,
   payment: renderPaymentModal,
   billDetail: (ctx) => (
-    <BillDetailModal data={ctx.modal.data} onClose={ctx.closeModal} />
+    <BillDetailModal
+      data={ctx.modal.data}
+      onClose={ctx.closeModal}
+      customers={ctx.customers}
+    />
   ),
   addAdj: renderAdjustmentModal,
   addPause: renderPauseModal,

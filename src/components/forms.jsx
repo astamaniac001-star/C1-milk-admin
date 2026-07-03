@@ -313,10 +313,13 @@ export function PaymentModal({
   onClose,
   today,
   payModes,
+  customers = [],
 }) {
+  const customerName =
+    customers.find((c) => c.id === data.custId)?.name || "Unknown Customer";
   const [busy, save] = useBusy(onSave);
   return (
-    <Modal title={"Record Payment — " + data.customer} onClose={onClose}>
+    <Modal title={"Record Payment — " + customerName} onClose={onClose}>
       <div
         style={{
           background: BLUE_L,
@@ -380,12 +383,14 @@ export function PaymentModal({
   );
 }
 
-export function BillDetailModal({ data, onClose }) {
+export function BillDetailModal({ data, onClose, customers = [] }) {
+  const customerName =
+    customers.find((c) => c.id === data.custId)?.name || "Unknown Customer";
   return (
-    <Modal title={"Bill — " + data.customer} onClose={onClose}>
+    <Modal title={"Bill — " + customerName} onClose={onClose}>
       {[
         ["Bill ID", data.id],
-        ["Customer", data.customer],
+        ["Customer", customerName],
         ["Month", data.month],
         ["Amount", fmt(data.amount)],
         ["Paid", fmt(data.paid)],

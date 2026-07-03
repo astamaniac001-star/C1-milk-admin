@@ -141,6 +141,7 @@ export default function Billing({
   onBillFilterChange,
   onBillMonthChange,
   onOpenModal,
+  onGenerateBill,
   onLock,
   onUnlock,
   onWhatsapp,
@@ -157,6 +158,10 @@ export default function Billing({
               onClick={() => onOpenModal("addCreditNote")}
             >
               Generate
+            </Btn>
+            {/* ✅ FIXED: This now actually generates bills */}
+            <Btn small onClick={() => onGenerateBill()}>
+              Generate Bills
             </Btn>
           </div>
         }

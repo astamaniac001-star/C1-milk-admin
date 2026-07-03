@@ -27,6 +27,7 @@ export function mapBillFromApi(b) {
     due: b.dueDate,
     status: b.status,
     version: b.version,
+    locked: !!b.locked,
   };
 }
 
@@ -54,6 +55,7 @@ export function mapLogFromApi(l) {
     status: l.status,
     source: l.source || "SUBSCRIPTION",
     reason: l.reason || "",
+    qty: Number(l.quantity || l.qty || 0),
   };
 }
 

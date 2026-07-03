@@ -16,9 +16,9 @@
   "entry": [
     "public/sw.js",
     "functions/api.js",
-    "functions/tests/proxy-test.js"
+    "functions/tests/proxy-test.js",
   ],
   "duplicates": {
-    "ignore": ["dup:c53e2f4f", "functions/**", "dist/**", "node_modules/**"]
-  }
+    "ignore": ["dup:c53e2f4f", "functions/**", "dist/**", "node_modules/**"],
+  },
 }

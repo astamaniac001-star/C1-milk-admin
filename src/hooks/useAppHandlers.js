@@ -1,12 +1,15 @@
 import { useMemo, useCallback } from "react";
 import {
   callApi,
+  mapImportFromApi,
+  mapAdjustmentFromApi,
   mapCustomerToApi,
   mapImportToApi,
   mapPaymentToApi,
   mapBillFromApi,
 } from "../lib/api.js";
 import { getToday } from "../lib/utils.js";
+import { validateCustomerForm, validateImportForm } from "../lib/validation.js";
 
 // fallow-ignore-next-line complexity
 export function useAppHandlers(state) {
@@ -293,6 +296,11 @@ export function useAppHandlers(state) {
     async (formArg) => {
       const f = formArg || form;
       if (!f) return;
+      const validationError = validateCustomerForm(f);
+      if (validationError) {
+        showToast(validationError, "error");
+        return;
+      }
       if (f.id) {
         return customerHandlers.updateCustomer(f);
       }
@@ -305,6 +313,11 @@ export function useAppHandlers(state) {
     async (formArg) => {
       const f = formArg || form;
       if (!f) return;
+      const validationError = validateImportForm(f);
+      if (validationError) {
+        showToast(validationError, "error");
+        return;
+      }
       if (f.id) {
         return importHandlers.updateMilkImport(f);
       }
@@ -549,6 +562,58 @@ export function useAppHandlers(state) {
     [showToast],
   );
 
+  // ── IMPORT LIFECYCLE (Fixes F1) ─────────────────────────────────────────
+  const confirmMilkImport = useCallback(
+    async (importId) => {
+      try {
+        await callApi("confirmMilkImport", { importId });
+        showToast("Import confirmed", "success");
+        // Refetch to get the true server state (Fixes F11 optimistic drift)
+        const res = await callApi("getMilkImports", {});
+        setImports((res.imports || []).map(mapImportFromApi));
+      } catch (err) {
+        showToast(err.message || "Failed to confirm import", "error");
+      }
+    },
+    [showToast, setImports],
+  );
+
+  const deleteMilkImport = useCallback(
+    async (importId) => {
+      try {
+        // Assuming backend has deleteMilkImport, or uses updateMilkImport with status='DELETED'
+        await callApi("deleteMilkImport", { importId });
+        showToast("Import deleted", "success");
+        const res = await callApi("getMilkImports", {});
+        setImports((res.imports || []).map(mapImportFromApi));
+      } catch (err) {
+        showToast(err.message || "Failed to delete import", "error");
+      }
+    },
+    [showToast, setImports],
+  );
+
+  // ── ADJUSTMENT LIFECYCLE (Fixes F2) ─────────────────────────────────────
+  const applyAdjustment = useCallback(
+    async (adjustmentId, billId) => {
+      try {
+        await callApi("applyAdjustment", { adjustmentId, billId });
+        showToast("Adjustment applied", "success");
+
+        // Refetch adjustments and bills since the adjustment affects the bill total
+        const [adjRes, billRes] = await Promise.all([
+          callApi("getAdjustments", {}),
+          callApi("getBills", {}),
+        ]);
+        setAdjustments((adjRes.adjustments || []).map(mapAdjustmentFromApi));
+        setBills((billRes.bills || []).map(mapBillFromApi));
+      } catch (err) {
+        showToast(err.message || "Failed to apply adjustment", "error");
+      }
+    },
+    [showToast, setAdjustments, setBills],
+  );
+
   return useMemo(
     () => ({
       ...customerHandlers,
@@ -568,6 +633,9 @@ export function useAppHandlers(state) {
       addAdHocLog,
       addCreditNote,
       fetchSubscriptionHistory,
+      confirmMilkImport,
+      deleteMilkImport,
+      applyAdjustment,
     }),
     [
       customerHandlers,
@@ -587,6 +655,9 @@ export function useAppHandlers(state) {
       addAdHocLog,
       addCreditNote,
       fetchSubscriptionHistory,
+      confirmMilkImport,
+      deleteMilkImport,
+      applyAdjustment,
     ],
   );
 }

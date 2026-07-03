@@ -171,7 +171,7 @@ export default function Delivery({
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Badge label={l.delivered ? "Delivered" : "Skipped"} />
                 <button
-                  onClick={() => onToggleLog(l.id)}
+                  onClick={() => onToggleLog(l.id, !l.delivered)}
                   style={getToggleButtonStyle(l.delivered)}
                 >
                   {getToggleButtonText(l.delivered)}

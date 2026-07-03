@@ -62,8 +62,8 @@ function renderImports(state, handlers) {
       impFilter={state.impFilter}
       onImpFilterChange={state.setImpFilter}
       onOpenModal={state.openModal}
-      onConfirm={handlers.addMilkImport} // Fixed handler name to match Phase 2
-      onDelete={handlers.updateMilkImport} // Imports are soft-deleted/updated
+      onConfirm={handlers.confirmMilkImport}
+      onDelete={handlers.deleteMilkImport}
     />
   );
 }
@@ -79,8 +79,12 @@ function renderBilling(state, handlers) {
       customers={state.customers}
       onBillFilterChange={state.setBillFilter}
       onBillMonthChange={state.setBillMonth}
-      onGenerateBill={handlers.generateMonthlyBills} // Fixed handler name to match Phase 2
       onOpenModal={state.openModal}
+      onGenerateBill={() =>
+        handlers.generateMonthlyBills(
+          state.billMonth || state.today.substring(0, 7),
+        )
+      }
       onLock={handlers.lockBill}
       onUnlock={handlers.unlockBill}
       onWhatsapp={handlers.whatsapp}
@@ -100,7 +104,7 @@ function renderMore(state, handlers) {
       diagRan={state.diagRan}
       activeBrandsCount={state.activeBrandsCount}
       onOpenModal={state.openModal}
-      onApplyAdj={handlers.saveAdjustment}
+      onApplyAdj={(adjId, billId) => handlers.applyAdjustment(adjId, billId)}
       onRunDiag={() => {
         state.setDiagRan(true);
         state.toast$("19 checks complete", "info");

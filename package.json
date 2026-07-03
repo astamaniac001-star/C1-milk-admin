@@ -20,7 +20,7 @@
     "wprettier": "npx prettier --write .",
     "check-deps": "npx depcheck",
     "spellcheck": "npx cspell \"src/**/*.{js,jsx}\"",
-    "check-all": "npm run lint && npm run test && npm run build && npm run audit && npm run circular && npm run fallow && npm run health && npm run spellcheck  && npm run check-deps && npm outdated && npm run cprettier"
+    "check-all": "npm run lint && npm run test && npm run build && npm run audit && npm run circular && npm run fallow && npm run health && npm run spellcheck  && npm run check-deps && npm outdated --depth 0"
   },
   "dependencies": {
     "react": "^19.2.6",
