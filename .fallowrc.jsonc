@@ -15,10 +15,10 @@
   //                              netlify.toml redirect /api -> proxy
   "entry": [
     "public/sw.js",
-    "netlify/functions/proxy.js",
-    "netlify/tests/proxy-test.js", // <-- ADD THIS LINE
+    "functions/api.js",
+    "functions/tests/proxy-test.js"
   ],
   "duplicates": {
-    "ignore": ["dup:c53e2f4f"],
-  },
+    "ignore": ["dup:c53e2f4f", "functions/**", "dist/**", "node_modules/**"]
+  }
 }
