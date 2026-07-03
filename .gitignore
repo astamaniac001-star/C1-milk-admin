@@ -29,8 +29,8 @@ coverage
 *.sln
 *.sw?
 
-# Local Netlify folder
-.netlify
+# Local Vercel folder
+.vercel
 
 # Playwright
 /test-results/
