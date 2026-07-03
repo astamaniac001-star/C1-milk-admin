@@ -1,4 +1,5 @@
 // ── forms.jsx ─────────────────────────────────────────────────────────────────
+import { useState, useEffect } from "react";
 import { fmt } from "../lib/utils.js";
 import { BLUE_L, BLUE } from "../lib/constants.js";
 import { useBusy } from "../hooks/useBusy.js";
@@ -728,7 +729,13 @@ export function SubscriptionModal({
   );
 }
 
-export function SubscriptionsListModal({ subscriptions, onEdit, onClose }) {
+// ── SUBSCRIPTIONS LIST MODAL ─────────────────────────────────────────────────
+export function SubscriptionsListModal({
+  subscriptions,
+  onEdit,
+  onViewHistory,
+  onClose,
+}) {
   return (
     <Modal title="Manage Subscriptions" onClose={onClose} wide>
       <div
@@ -745,6 +752,7 @@ export function SubscriptionsListModal({ subscriptions, onEdit, onClose }) {
         <Btn small onClick={() => onEdit(null)}>
           + Add Subscription
         </Btn>
+        {/* ✅ STRAY BUTTON REMOVED FROM HERE */}
       </div>
       <div style={{ maxHeight: 400, overflowY: "auto" }}>
         {subscriptions.length === 0 ? (
@@ -778,6 +786,7 @@ export function SubscriptionsListModal({ subscriptions, onEdit, onClose }) {
                 <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
                   {sub.milkType} • {sub.quantity}L •{" "}
                   {sub.deliveryDays
+                    .slice() // ✅ Added .slice() to prevent mutating the original array
                     .sort((a, b) => a - b)
                     .map(
                       (d) =>
@@ -799,6 +808,14 @@ export function SubscriptionsListModal({ subscriptions, onEdit, onClose }) {
                 >
                   {sub.isActive ? "Active" : "Paused"}
                 </span>
+                {/* ✅ THE CORRECT "History" BUTTON IS INSIDE THE MAP LOOP */}
+                <Btn
+                  small
+                  variant="secondary"
+                  onClick={() => onViewHistory(sub)}
+                >
+                  History
+                </Btn>
                 <Btn small variant="secondary" onClick={() => onEdit(sub)}>
                   Edit
                 </Btn>
@@ -807,6 +824,196 @@ export function SubscriptionsListModal({ subscriptions, onEdit, onClose }) {
           ))
         )}
       </div>
+    </Modal>
+  );
+}
+
+// ── AD-HOC LOG MODAL ─────────────────────────────────────────────────────────
+// fallow-ignore-next-line complexity
+export function AdHocLogModal({
+  data,
+  form,
+  onChange,
+  onSave,
+  onClose,
+  today,
+  customers,
+}) {
+  const [busy, save] = useBusy(onSave);
+  return (
+    <Modal title="Add Extra Delivery" onClose={onClose}>
+      <CustomerDateFields
+        form={form}
+        data={data}
+        today={today}
+        customers={customers}
+        onChange={onChange}
+      />
+      <Field label="Quantity (L) *">
+        <input
+          type="number"
+          step="0.5"
+          style={IS()}
+          value={form?.qty ?? 1}
+          onChange={onChange("qty")}
+        />
+      </Field>
+      <Field label="Reason (Optional)">
+        <input
+          style={IS()}
+          value={form?.reason ?? ""}
+          onChange={onChange("reason")}
+          placeholder="Guests, Festival..."
+        />
+      </Field>
+      <div style={{ display: "flex", gap: 8 }}>
+        <Btn onClick={save} disabled={busy}>
+          {busy ? "Adding..." : "Add Delivery"}
+        </Btn>
+        <Btn variant="secondary" onClick={onClose} disabled={busy}>
+          Cancel
+        </Btn>
+      </div>
+    </Modal>
+  );
+}
+
+// ── CREDIT NOTE MODAL ────────────────────────────────────────────────────────
+// fallow-ignore-next-line complexity
+export function CreditNoteModal({
+  form,
+  onChange,
+  onSave,
+  onClose,
+  customers,
+}) {
+  const [busy, save] = useBusy(onSave);
+  return (
+    <Modal title="Issue Credit Note" onClose={onClose}>
+      <Field label="Customer *">
+        <select
+          style={IS()}
+          value={form?.customerId ?? ""}
+          onChange={onChange("customerId")}
+        >
+          <option value="">Select Customer</option>
+          <ActiveCustomerOptions customers={customers} />
+        </select>
+      </Field>
+      <Field label="Amount (₹) *">
+        <input
+          type="number"
+          style={IS()}
+          value={form?.amount ?? ""}
+          onChange={onChange("amount")}
+          placeholder="50"
+        />
+      </Field>
+      <Field label="Reason *">
+        <input
+          style={IS()}
+          value={form?.reason ?? ""}
+          onChange={onChange("reason")}
+          placeholder="Spoiled milk, Missed delivery..."
+        />
+      </Field>
+      <div style={{ display: "flex", gap: 8 }}>
+        <Btn onClick={save} disabled={busy}>
+          {busy ? "Issuing..." : "Issue Credit"}
+        </Btn>
+        <Btn variant="secondary" onClick={onClose} disabled={busy}>
+          Cancel
+        </Btn>
+      </div>
+    </Modal>
+  );
+}
+
+// ── SUBSCRIPTION HISTORY MODAL ───────────────────────────────────────────────
+// fallow-ignore-next-line complexity
+export function SubscriptionHistoryModal({ data, onClose, handlers }) {
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  // fallow-ignore-next-line complexity
+  useEffect(() => {
+    if (data?.id && handlers?.fetchSubscriptionHistory) {
+      handlers.fetchSubscriptionHistory(data.id).then((res) => {
+        setHistory(res);
+        setLoading(false);
+      });
+    }
+  }, [data, handlers]);
+
+  return (
+    <Modal
+      title={`History: ${data?.customerName || "Subscription"}`}
+      onClose={onClose}
+      wide
+    >
+      {loading ? (
+        <div style={{ padding: 20, textAlign: "center", color: "#6b7280" }}>
+          Loading timeline...
+        </div>
+      ) : history.length === 0 ? (
+        <div style={{ padding: 20, textAlign: "center", color: "#9ca3af" }}>
+          No changes recorded yet.
+        </div>
+      ) : (
+        <div style={{ maxHeight: 400, overflowY: "auto", padding: "0 8px" }}>
+          // fallow-ignore-next-line complexity
+          {history.map((item, idx) => (
+            <div
+              key={item.id}
+              style={{ display: "flex", gap: 12, marginBottom: 16 }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                }}
+              >
+                <div
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: "50%",
+                    background:
+                      item.action === "CREATED" ? "#10b981" : "#3b82f6",
+                  }}
+                />
+                {idx !== history.length - 1 && (
+                  <div
+                    style={{
+                      width: 2,
+                      flex: 1,
+                      background: "#e5e7eb",
+                      marginTop: 4,
+                    }}
+                  />
+                )}
+              </div>
+              <div style={{ flex: 1, paddingBottom: 8 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: item.action === "CREATED" ? "#059669" : "#1e40af",
+                  }}
+                >
+                  {item.action}
+                </div>
+                <div style={{ fontSize: 13, color: "#111", marginTop: 2 }}>
+                  {item.details}
+                </div>
+                <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
+                  {new Date(item.timestamp).toLocaleString("en-IN")}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </Modal>
   );
 }

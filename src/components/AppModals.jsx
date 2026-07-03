@@ -9,6 +9,9 @@ import {
   BrandModal,
   SubscriptionModal,
   SubscriptionsListModal,
+  SubscriptionHistoryModal,
+  AdHocLogModal,
+  CreditNoteModal,
 } from "./forms.jsx";
 
 function renderCustomerModal(ctx, isEdit) {
@@ -121,7 +124,32 @@ const MODAL_RENDERERS = {
       milkTypes={MILK_TYPES}
     />
   ),
-
+  addAdHoc: (ctx) => (
+    <AdHocLogModal
+      form={ctx.form}
+      onChange={ctx.setF}
+      onSave={() => ctx.handlers.addAdHocLog(ctx.form)}
+      onClose={ctx.closeModal}
+      today={ctx.today}
+      customers={ctx.customers}
+    />
+  ),
+  addCreditNote: (ctx) => (
+    <CreditNoteModal
+      form={ctx.form}
+      onChange={ctx.setF}
+      onSave={() => ctx.handlers.addCreditNote(ctx.form)}
+      onClose={ctx.closeModal}
+      customers={ctx.customers}
+    />
+  ),
+  subscriptionHistory: (ctx) => (
+    <SubscriptionHistoryModal
+      data={ctx.modal.data}
+      onClose={ctx.closeModal}
+      handlers={ctx.handlers}
+    />
+  ),
   // ── SUBSCRIPTION MODALS ────────────────────────────────────────────────
   subscriptionsList: (ctx) => (
     <SubscriptionsListModal
@@ -146,6 +174,7 @@ const MODAL_RENDERERS = {
           ctx.openModal(sub ? "editSubscription" : "addSubscription");
         }
       }}
+      onViewHistory={(sub) => ctx.openModal("subscriptionHistory", sub)}
       onClose={ctx.closeModal}
     />
   ),

@@ -9,6 +9,7 @@ import {
   mapPauseFromApi,
   mapBrandFromApi,
   mapSubscriptionFromApi,
+  mapCreditNoteFromApi,
 } from "../lib/api.js";
 import { getToday } from "../lib/utils.js";
 
@@ -24,7 +25,7 @@ export function useEntityStore() {
   const [subscriptions, setSubscriptions] = useState([]);
   const [loadErrors, setLoadErrors] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
-
+  const [creditNotes, setCreditNotes] = useState([]);
   const refresh = useCallback(() => {
     setLoadErrors([]);
     setRefreshKey((k) => k + 1);
@@ -45,7 +46,7 @@ export function useEntityStore() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const [custs, bils, imps, lgs, adjs, paus, brnds, subs] =
+      const [custs, bils, imps, lgs, adjs, paus, brnds, subs, cns] =
         await Promise.all([
           safeFetch("getCustomers", {}, "customers"),
           safeFetch("getBills", {}, "bills"),
@@ -55,6 +56,7 @@ export function useEntityStore() {
           safeFetch("getPauses", {}, "pauses"),
           safeFetch("getBrands", {}, "brands"),
           safeFetch("getSubscriptions", {}, "subscriptions"),
+          safeFetch("getCreditNotes", {}, "creditNotes"),
         ]);
 
       setCustomers(custs.map(mapCustomerFromApi));
@@ -65,6 +67,7 @@ export function useEntityStore() {
       setPauses(paus.map(mapPauseFromApi));
       setBrands(brnds.map(mapBrandFromApi));
       setSubscriptions(subs.map(mapSubscriptionFromApi));
+      setCreditNotes(cns.map(mapCreditNoteFromApi));
     };
     fetchData();
   }, [safeFetch, refreshKey]);
@@ -96,6 +99,8 @@ export function useEntityStore() {
     subscriptions,
     setSubscriptions,
     fetchLogs,
+    creditNotes,
+    setCreditNotes,
     loadErrors,
     refresh,
   };

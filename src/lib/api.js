@@ -50,8 +50,10 @@ export function mapLogFromApi(l) {
     id: l.logId,
     custId: l.customerId,
     date: l.date,
-    delivered: l.delivered,
+    delivered: l.status === "DELIVERED", // Adjust based on your actual status logic
     status: l.status,
+    source: l.source || "SUBSCRIPTION",
+    reason: l.reason || "",
   };
 }
 
@@ -93,6 +95,17 @@ export function mapSubscriptionFromApi(s) {
     deliveryDays: Array.isArray(s.deliveryDays) ? s.deliveryDays : [],
     isActive: s.isActive === true || s.isActive === "TRUE",
     version: Number(s.version) || 1,
+  };
+}
+
+export function mapCreditNoteFromApi(c) {
+  return {
+    id: c.id,
+    customerId: c.customerId,
+    billId: c.billId || "",
+    amount: Number(c.amount),
+    reason: c.reason,
+    createdAt: c.createdAt,
   };
 }
 

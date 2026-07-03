@@ -140,7 +140,6 @@ export default function Billing({
   customers,
   onBillFilterChange,
   onBillMonthChange,
-  onGenerateBill,
   onOpenModal,
   onLock,
   onUnlock,
@@ -152,7 +151,11 @@ export default function Billing({
         title="Billing"
         action={
           <div style={{ display: "flex", gap: 6 }}>
-            <Btn small variant="secondary" onClick={onGenerateBill}>
+            <Btn
+              small
+              variant="secondary"
+              onClick={() => onOpenModal("addCreditNote")}
+            >
               Generate
             </Btn>
           </div>

@@ -48,6 +48,7 @@ export default function Delivery({
   onToggleLog,
   fetchLogs,
   generateDailyLogs,
+  onOpenModal,
 }) {
   const stats = calculateDeliveryStats(todayLogs);
 
@@ -90,8 +91,15 @@ export default function Delivery({
             />
           </Field>
         </div>
-
-        {/* 👇 THE NEW AUTOMATION BUTTON 👇 */}
+        {/* 👇 WRAP THE BUTTONS IN A FLEX CONTAINER 👇 */}
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "flex-end",
+            flexWrap: "wrap",
+          }}
+        ></div>
         <Btn
           small
           onClick={handleGenerate}
@@ -108,6 +116,14 @@ export default function Delivery({
           }}
         >
           {busy ? "⏳ Generating..." : "⚡ Generate Deliveries"}
+        </Btn>
+        <Btn
+          small
+          variant="secondary"
+          onClick={() => onOpenModal("addAdHoc")}
+          style={{ whiteSpace: "nowrap" }}
+        >
+          + Extra Delivery
         </Btn>
       </div>
 

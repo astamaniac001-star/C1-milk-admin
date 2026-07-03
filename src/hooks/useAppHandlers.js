@@ -505,6 +505,50 @@ export function useAppHandlers(state) {
     [showToast],
   );
 
+  const addAdHocLog = useCallback(
+    async (data) => {
+      try {
+        await callApi("addAdHocLog", {
+          ...data,
+          idempotencyKey: `adhoc-${Date.now()}`,
+        });
+        showToast("Extra delivery added", "success");
+        if (closeModal) closeModal();
+        if (state.fetchLogs) await state.fetchLogs(data.date);
+      } catch (err) {
+        showToast(err.message || "Failed to add extra delivery", "error");
+      }
+    },
+    [showToast, closeModal, state],
+  );
+
+  const addCreditNote = useCallback(
+    async (data) => {
+      try {
+        await callApi("addCreditNote", data);
+        showToast("Credit note issued", "success");
+        if (closeModal) closeModal();
+        if (state.refresh) state.refresh();
+      } catch (err) {
+        showToast(err.message || "Failed to issue credit note", "error");
+      }
+    },
+    [showToast, closeModal, state],
+  );
+
+  const fetchSubscriptionHistory = useCallback(
+    async (subscriptionId) => {
+      try {
+        const res = await callApi("getSubscriptionHistory", { subscriptionId });
+        return res.history || [];
+      } catch (err) {
+        showToast(err.message || "Failed to load history", "error");
+        return [];
+      }
+    },
+    [showToast],
+  );
+
   return useMemo(
     () => ({
       ...customerHandlers,
@@ -521,6 +565,9 @@ export function useAppHandlers(state) {
       whatsapp,
       saveSubscription,
       generateDailyLogs,
+      addAdHocLog,
+      addCreditNote,
+      fetchSubscriptionHistory,
     }),
     [
       customerHandlers,
@@ -537,6 +584,9 @@ export function useAppHandlers(state) {
       whatsapp,
       saveSubscription,
       generateDailyLogs,
+      addAdHocLog,
+      addCreditNote,
+      fetchSubscriptionHistory,
     ],
   );
 }

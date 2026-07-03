@@ -49,6 +49,7 @@ function renderDelivery(state, handlers) {
       onToggleLog={handlers.toggleDeliveryLog}
       fetchLogs={state.fetchLogs}
       generateDailyLogs={handlers.generateDailyLogs}
+      onOpenModal={state.openModal}
     />
   );
 }
@@ -83,6 +84,7 @@ function renderBilling(state, handlers) {
       onLock={handlers.lockBill}
       onUnlock={handlers.unlockBill}
       onWhatsapp={handlers.whatsapp}
+      onOpenModal={state.openModal}
     />
   );
 }

@@ -691,6 +691,9 @@ const ALLOWED_ACTIONS = new Set([
   "getSubscriptions",
   "saveSubscription",
   "generateDailyLogsForDate",
+  "addAdHocLog",
+  "getSubscriptionHistory",
+  "getCreditNotes",
   // Customers
   "addCustomer",
   "updateCustomer",
@@ -953,6 +956,14 @@ function doPost(e) {
         return eraseAllData(payload);
       case "runMigration":
         return runMigration(payload);
+      case "addAdHocLog":
+        return addAdHocLog(payload);
+      case "getSubscriptionHistory":
+        return getSubscriptionHistory(payload);
+      case "addCreditNote":
+        return addCreditNote(payload);
+      case "getCreditNotes":
+        return getCreditNotes();
       default:
         // Should be unreachable given the ALLOWED_ACTIONS check above, but
         // kept as a hard stop rather than falling through silently.
