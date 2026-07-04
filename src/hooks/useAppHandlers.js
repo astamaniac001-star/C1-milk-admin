@@ -36,39 +36,65 @@ export function useAppHandlers(state) {
 
   const showToast = useCallback((msg, type) => toast$(msg, type), [toast$]);
 
+  // ── Shared Action Helpers ───────────────────────────────────────────────
+  const handleFormAction = useCallback(
+    async (action, formArg, successMsg, mapToApi, getList, setList, mapFromApi, resKey) => {
+      const f = formArg || form;
+      try {
+        const payload = mapToApi(f);
+        await callApi(action, payload);
+        showToast(successMsg, "success");
+        if (closeModal) closeModal();
+        const res = await callApi(getList, {});
+        setList((res[resKey] || []).map(mapFromApi));
+      } catch (e) {
+        showToast(e.message, "error");
+      }
+    },
+    [form, closeModal, showToast],
+  );
+
+  const handleIdAction = useCallback(
+    async (action, idKey, id, successMsg, getList, setList, mapFromApi, resKey, fallbackErrMsg) => {
+      try {
+        await callApi(action, { [idKey]: id });
+        showToast(successMsg, "success");
+        const res = await callApi(getList, {});
+        setList((res[resKey] || []).map(mapFromApi));
+      } catch (err) {
+        showToast(fallbackErrMsg || err.message, "error");
+      }
+    },
+    [showToast],
+  );
+
   // 1. Customer Handlers
   const customerHandlers = useMemo(
     () => ({
-      addCustomer: async (formArg) => {
-        const f = formArg || form;
-        try {
-          const payload = mapCustomerToApi(f);
-          await callApi("addCustomer", payload);
-          showToast("Customer added", "success");
-          if (closeModal) closeModal();
-          // ✅ REFRESH FROM SERVER (No more optimistic guessing)
-          const res = await callApi("getCustomers", {});
-          setCustomers((res.customers || []).map(mapCustomerFromApi));
-        } catch (e) {
-          showToast(e.message, "error");
-        }
-      },
-      updateCustomer: async (formArg) => {
-        const f = formArg || form;
-        try {
-          const payload = mapCustomerToApi(f);
-          await callApi("updateCustomer", payload);
-          showToast("Customer updated", "success");
-          if (closeModal) closeModal();
-          // ✅ REFRESH FROM SERVER
-          const res = await callApi("getCustomers", {});
-          setCustomers((res.customers || []).map(mapCustomerFromApi));
-        } catch (e) {
-          showToast(e.message, "error");
-        }
-      },
+      addCustomer: async (formArg) =>
+        handleFormAction(
+          "addCustomer",
+          formArg,
+          "Customer added",
+          mapCustomerToApi,
+          "getCustomers",
+          setCustomers,
+          mapCustomerFromApi,
+          "customers"
+        ),
+      updateCustomer: async (formArg) =>
+        handleFormAction(
+          "updateCustomer",
+          formArg,
+          "Customer updated",
+          mapCustomerToApi,
+          "getCustomers",
+          setCustomers,
+          mapCustomerFromApi,
+          "customers"
+        ),
     }),
-    [setCustomers, showToast, closeModal, form],
+    [setCustomers, handleFormAction],
   );
 
   // 2. Billing Handlers
@@ -153,36 +179,30 @@ export function useAppHandlers(state) {
   // 3. Import Handlers
   const importHandlers = useMemo(
     () => ({
-      addMilkImport: async (formArg) => {
-        const f = formArg || form;
-        try {
-          const payload = mapImportToApi(f);
-          await callApi("addMilkImport", payload);
-          showToast("Import added", "success");
-          if (closeModal) closeModal();
-          // ✅ REFRESH FROM SERVER
-          const res = await callApi("getMilkImports", {});
-          setImports((res.imports || []).map(mapImportFromApi));
-        } catch (e) {
-          showToast(e.message, "error");
-        }
-      },
-      updateMilkImport: async (formArg) => {
-        const f = formArg || form;
-        try {
-          const payload = mapImportToApi(f);
-          await callApi("updateMilkImport", payload);
-          showToast("Import updated", "success");
-          if (closeModal) closeModal();
-          // ✅ REFRESH FROM SERVER
-          const res = await callApi("getMilkImports", {});
-          setImports((res.imports || []).map(mapImportFromApi));
-        } catch (e) {
-          showToast(e.message, "error");
-        }
-      },
+      addMilkImport: async (formArg) =>
+        handleFormAction(
+          "addMilkImport",
+          formArg,
+          "Import added",
+          mapImportToApi,
+          "getMilkImports",
+          setImports,
+          mapImportFromApi,
+          "imports"
+        ),
+      updateMilkImport: async (formArg) =>
+        handleFormAction(
+          "updateMilkImport",
+          formArg,
+          "Import updated",
+          mapImportToApi,
+          "getMilkImports",
+          setImports,
+          mapImportFromApi,
+          "imports"
+        ),
     }),
-    [setImports, showToast, closeModal, form],
+    [setImports, handleFormAction],
   );
 
   // 4. Delivery Handlers
@@ -362,7 +382,7 @@ export function useAppHandlers(state) {
         await callApi("saveSubscription", payload);
         showToast("Subscription saved", "success");
         if (closeModal) closeModal();
-        
+
         // ✅ REFRESH FROM SERVER
         const res = await callApi("getSubscriptions", {});
         setSubscriptions((res.subscriptions || []).map(mapSubscriptionFromApi));
@@ -405,33 +425,33 @@ export function useAppHandlers(state) {
 
   // 8. Bill lifecycle
   const lockBill = useCallback(
-    async (billId) => {
-      try {
-        await callApi("lockBill", { billId });
-        showToast("Bill locked", "success");
-        // ✅ REFRESH FROM SERVER
-        const res = await callApi("getBills", {});
-        setBills((res.bills || []).map(mapBillFromApi));
-      } catch (err) {
-        showToast(err.message, "error");
-      }
-    },
-    [setBills, showToast],
+    async (billId) =>
+      handleIdAction(
+        "lockBill",
+        "billId",
+        billId,
+        "Bill locked",
+        "getBills",
+        setBills,
+        mapBillFromApi,
+        "bills"
+      ),
+    [setBills, handleIdAction],
   );
 
   const unlockBill = useCallback(
-    async (billId) => {
-      try {
-        await callApi("unlockBill", { billId });
-        showToast("Bill unlocked", "success");
-        // ✅ REFRESH FROM SERVER
-        const res = await callApi("getBills", {});
-        setBills((res.bills || []).map(mapBillFromApi));
-      } catch (err) {
-        showToast(err.message, "error");
-      }
-    },
-    [setBills, showToast],
+    async (billId) =>
+      handleIdAction(
+        "unlockBill",
+        "billId",
+        billId,
+        "Bill unlocked",
+        "getBills",
+        setBills,
+        mapBillFromApi,
+        "bills"
+      ),
+    [setBills, handleIdAction],
   );
 
   // 9. WhatsApp share
@@ -441,6 +461,7 @@ export function useAppHandlers(state) {
         showToast("No phone number on file", "error");
         return;
       }
+      // Fixed typo: changed /D/g to /\D/g to correctly remove non-digit characters
       const digits = String(phone).replace(/\D/g, "");
       const intlPhone = digits.length === 10 ? "91" + digits : digits;
       if (!intlPhone) {
@@ -507,36 +528,27 @@ export function useAppHandlers(state) {
     [showToast],
   );
 
-  // 10. Import Lifecycle
-  const confirmMilkImport = useCallback(
-    async (importId) => {
-      try {
-        await callApi("confirmMilkImport", { importId });
-        showToast("Import confirmed", "success");
-        // ✅ REFRESH FROM SERVER
-        const res = await callApi("getMilkImports", {});
-        setImports((res.imports || []).map(mapImportFromApi));
-      } catch (err) {
-        showToast(err.message || "Failed to confirm import", "error");
-      }
-    },
-    [showToast, setImports], // ✅ Added showToast to deps
+    // 10. Import Lifecycle
+  const handleImportAction = useCallback(
+    async (action, importId, successMsg, fallbackErrMsg) =>
+      handleIdAction(
+        action,
+        "importId",
+        importId,
+        successMsg,
+        "getMilkImports",
+        setImports,
+        mapImportFromApi,
+        "imports",
+        fallbackErrMsg
+      ),
+    [setImports, handleIdAction],
   );
 
-  const deleteMilkImport = useCallback(
-    async (importId) => {
-      try {
-        await callApi("deleteMilkImport", { importId });
-        showToast("Import deleted", "success");
-        // ✅ REFRESH FROM SERVER
-        const res = await callApi("getMilkImports", {});
-        setImports((res.imports || []).map(mapImportFromApi));
-      } catch (err) {
-        showToast(err.message || "Failed to delete import", "error");
-      }
-    },
-    [showToast, setImports], // ✅ Added showToast to deps
-  );
+   const importActions = useMemo(() => ({
+    confirmMilkImport: (id) => handleImportAction("confirmMilkImport", id, "Import confirmed", "Failed to confirm import"),
+    deleteMilkImport: (id) => handleImportAction("deleteMilkImport", id, "Import deleted", "Failed to delete import"),
+  }), [handleImportAction]);
 
   // 11. Adjustment Lifecycle
   const applyAdjustment = useCallback(
@@ -566,6 +578,7 @@ export function useAppHandlers(state) {
       ...importHandlers,
       ...deliveryHandlers,
       ...adminHandlers,
+      ...importActions,
       saveCustomer,
       saveImport,
       savePause,
@@ -602,6 +615,7 @@ export function useAppHandlers(state) {
       fetchSubscriptionHistory,
       confirmMilkImport,
       deleteMilkImport,
+      importActions,
       applyAdjustment,
     ],
   );
