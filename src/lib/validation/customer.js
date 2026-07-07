@@ -1,4 +1,4 @@
-import { cleanPhone, uuid } from "../utils.js";
+import { cleanPhone  } from "../utils.js";
 
 export function validateCustomerForm(form) {
   if (!form.name?.trim()) return "Name is required";
@@ -8,14 +8,3 @@ export function validateCustomerForm(form) {
   return null;
 }
 
-export function buildNewCustomer(form) {
-  return {
-    ...form,
-    id: "C" + uuid(),
-    status: "Active",
-    balance: 0,
-    deliveryDays: [1, 2, 3, 4, 5, 6, 0],
-    qty: parseFloat(form.qty) || 1,
-    product: form.product || "Full Cream",
-  };
-}

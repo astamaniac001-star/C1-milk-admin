@@ -1,5 +1,6 @@
 # public/_headers
-# Equivalent to the [[headers]] block in netlify.toml
+# Cloudflare Pages honors this _headers file for custom HTTP headers.
+# ... rest of the headers ...
 
 /*
   X-Frame-Options: DENY

@@ -172,12 +172,6 @@ function readSecret() {
     localStorage.getItem("sessionSecret")
   );
 }
-function clearTokens() {
-  sessionStorage.removeItem("token");
-  sessionStorage.removeItem("sessionSecret");
-  localStorage.removeItem("token");
-  localStorage.removeItem("sessionSecret");
-}
 
 export async function callApi(action, payload = {}) {
   const token = readToken();
@@ -197,15 +191,18 @@ export async function callApi(action, payload = {}) {
     const result = await response.json();
 
     if (!result.success) {
+      const errorCode = result.error?.code || result.error?.status || result.error;
       // 401 Interceptor: If backend rejects token, force logout.
-      const errorCode = result.error?.code;
       if (
         errorCode === "UNAUTHORIZED" ||
         errorCode === "SESSION_EXPIRED" ||
-        errorCode === "INVALID_TOKEN"
+        errorCode === "INVALID_TOKEN" ||
+        errorCode === 401
       ) {
-        clearTokens();
+        sessionStorage.removeItem("token");
+        localStorage.removeItem("token");
         window.location.reload();
+        return new Promise(() => {});
       }
       throw new Error(result.error?.message || "Unknown API error");
     }

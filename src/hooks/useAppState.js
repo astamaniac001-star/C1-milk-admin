@@ -5,13 +5,11 @@ import { useEntityStore, useFilterState } from "./useEntityStore.js";
 import { useAppDerived } from "./useAppDerived.js";
 
 function clampedToday() {
-  const d = getToday();
-  return d >= "2025-01-01" ? d : "2025-01-18";
+  return getToday();
 }
 
 function clampedMonth() {
-  const d = getToday();
-  return d >= "2025-01-01" ? d.substring(0, 7) : "2025-01";
+  return getToday().substring(0, 7);
 }
 
 function useAppUi() {
@@ -27,25 +25,41 @@ function useAppUi() {
     [],
   );
 
+  // ✅ Fix U2: Track timer ID to clear on unmount and prevent leaks
   const toastIdRef = useRef(0);
+  const toastTimerRef = useRef(null);
+
   const toast$ = useCallback((msg, type = "info") => {
     const id = ++toastIdRef.current;
+    
+    // ✅ Stop the timer if a new toast replaces the old one
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    
     setToast({ id, msg, type });
-    setTimeout(() => {
+    
+    // Schedule the new timeout and store its ID
+    toastTimerRef.current = setTimeout(() => {
       setToast((curr) => (curr && curr.id === id ? null : curr));
+      toastTimerRef.current = null;
     }, 3000);
   }, []);
-  useEffect(
-    () => () => {
-      toastIdRef.current = -1;
-    },
-    [],
-  );
+
+  // ✅ Clear timer on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
 
   const openModal = useCallback((type, data = {}) => {
     setModal({ type, data });
     setForm(data);
   }, []);
+  
   const closeModal = useCallback(() => {
     setModal(null);
     setForm({});

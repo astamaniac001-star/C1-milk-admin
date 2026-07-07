@@ -50,6 +50,7 @@ function renderDelivery(state, handlers) {
       fetchLogs={state.fetchLogs}
       generateDailyLogs={handlers.generateDailyLogs}
       onOpenModal={state.openModal}
+      customers={state.customers}
     />
   );
 }
@@ -57,13 +58,13 @@ function renderDelivery(state, handlers) {
 function renderImports(state, handlers) {
   return (
     <Imports
-      filtered={state.filteredI}
+      filtered={state.filteredImports}
       brands={state.brands}
       impFilter={state.impFilter}
       onImpFilterChange={state.setImpFilter}
       onOpenModal={state.openModal}
-      onConfirm={handlers.confirmMilkImport}
-      onDelete={handlers.deleteMilkImport}
+      onConfirm={handlers.confirmMilkImport} 
+      onDelete={handlers.deleteMilkImport}   
     />
   );
 }

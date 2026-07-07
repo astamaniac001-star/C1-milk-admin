@@ -1,6 +1,5 @@
 export {
   validateCustomerForm,
-  buildNewCustomer,
 } from "./validation/customer.js";
 
 export {

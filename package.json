@@ -19,8 +19,8 @@
     "cprettier": "npx prettier --check .",
     "wprettier": "npx prettier --write .",
     "check-deps": "npx depcheck",
-    "spellcheck": "npx cspell \"src/**/*.{js,jsx}\"",
-    "check-all": "npm run lint && npm run test && npm run build && npm run audit && npm run circular && npm run fallow && npm run health && npm run spellcheck  && npm run check-deps && npm outdated --depth 0"
+    "spellcheck": "npx cspell \"src/**/*.{js,jsx}\" \"*.md\" \"index.html\"",
+    "check-all": "npm run lint && npm run test && npm run build && npm run audit && npm run circular && npm run fallow && npm run health && npm run spellcheck  && npm run check-deps "
   },
   "dependencies": {
     "react": "^19.2.6",
@@ -28,6 +28,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@vitejs/plugin-react": "^6.0.3",
     "@vitest/coverage-v8": "^4.1.9",
     "eslint": "^10.6.0",

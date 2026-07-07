@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   validateCustomerForm,
-  buildNewCustomer,
   validateImportForm,
   parseImportValues,
   parseOptionalRate,
@@ -41,30 +40,6 @@ describe("validateCustomerForm", () => {
         phone: "98765-432",
       }),
     ).toBe("Enter valid 10-digit phone");
-  });
-});
-
-describe("buildNewCustomer", () => {
-  it("assigns defaults for new customers", () => {
-    const customer = buildNewCustomer({
-      name: "Ramesh",
-      address: "14 Lane",
-      qty: "2",
-    });
-
-    expect(customer.id).toMatch(/^C/);
-    expect(customer.status).toBe("Active");
-    expect(customer.balance).toBe(0);
-    expect(customer.deliveryDays).toEqual([1, 2, 3, 4, 5, 6, 0]);
-    expect(customer.qty).toBe(2);
-    expect(customer.product).toBe("Full Cream");
-    expect(customer.name).toBe("Ramesh");
-  });
-
-  it("preserves provided product", () => {
-    expect(
-      buildNewCustomer({ name: "A", address: "B", product: "Toned" }).product,
-    ).toBe("Toned");
   });
 });
 

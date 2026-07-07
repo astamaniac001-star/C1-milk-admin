@@ -1,12 +1,7 @@
+
 import { describe, it, expect, vi } from "vitest";
 import { useAppHandlers } from "./useAppHandlers";
-
-vi.mock("react", () => ({
-  useMemo: (fn) => fn(),
-  useCallback: (fn) => fn,
-  useState: (init) => [init, vi.fn()],
-  useEffect: () => {},
-}));
+import { renderHook, act } from '@testing-library/react';
 
 // ✅ UPDATED: Dynamic mock for callApi and all required mappers
 vi.mock("../lib/api.js", () => {
@@ -60,16 +55,18 @@ function createMockHandlers(overrides = {}) {
     setAdjustments: vi.fn(),
     setPauses: vi.fn(),
     setBrands: vi.fn(),
-    setSubscriptions: vi.fn(), // ✅ Added for subscription handlers
+    setSubscriptions: vi.fn(),
     setQueue: vi.fn(),
     today: "2025-01-15",
     billMonth: "2025-01",
     activeC: [],
-    fetchLogs: vi.fn(), // ✅ Added for generateDailyLogs
-    refresh: vi.fn(),   // ✅ Added for addCreditNote
+    fetchLogs: vi.fn(),
+    refresh: vi.fn(),
   };
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  return useAppHandlers({ ...defaults, ...overrides });
+  
+  // ✅ FIXED: Use renderHook to properly test React hooks without breaking rules
+  const { result } = renderHook(() => useAppHandlers({ ...defaults, ...overrides }));
+  return result.current;
 }
 
 describe("useAppHandlers - recordPayment", () => {
@@ -87,14 +84,17 @@ describe("useAppHandlers - recordPayment", () => {
       closeModal,
     });
 
-    await handlers.recordPayment();
+    // ✅ Wrap async state updates in act() to prevent React warnings
+    await act(async () => {
+      await handlers.recordPayment();
+    });
 
     expect(setBills).toHaveBeenCalled();
     expect(toast$).toHaveBeenCalledWith("₹100 recorded", "success");
     expect(closeModal).toHaveBeenCalled();
   });
 
-  it("rejects invalid payment amount", () => {
+  it("rejects invalid payment amount", async () => {
     const toast$ = vi.fn();
 
     const handlers = createMockHandlers({
@@ -102,7 +102,9 @@ describe("useAppHandlers - recordPayment", () => {
       toast$,
     });
 
-    handlers.recordPayment();
+    await act(async () => {
+      await handlers.recordPayment();
+    });
 
     expect(toast$).toHaveBeenCalledWith("Enter valid amount", "error");
   });
@@ -122,14 +124,16 @@ describe("useAppHandlers - saveAdjustment", () => {
       closeModal,
     });
 
-    await handlers.saveAdjustment();
+    await act(async () => {
+      await handlers.saveAdjustment();
+    });
 
     expect(setAdjustments).toHaveBeenCalled();
     expect(toast$).toHaveBeenCalledWith("Added", "success");
     expect(closeModal).toHaveBeenCalled();
   });
 
-  it("rejects incomplete adjustment data", () => {
+  it("rejects incomplete adjustment data", async () => {
     const toast$ = vi.fn();
 
     const handlers = createMockHandlers({
@@ -137,7 +141,9 @@ describe("useAppHandlers - saveAdjustment", () => {
       toast$,
     });
 
-    handlers.saveAdjustment();
+    await act(async () => {
+      await handlers.saveAdjustment();
+    });
 
     expect(toast$).toHaveBeenCalledWith("Fill all fields", "error");
   });

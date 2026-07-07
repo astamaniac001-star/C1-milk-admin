@@ -423,36 +423,12 @@ export function useAppHandlers(state) {
     [showToast, state],
   );
 
-  // 8. Bill lifecycle
-  const lockBill = useCallback(
-    async (billId) =>
-      handleIdAction(
-        "lockBill",
-        "billId",
-        billId,
-        "Bill locked",
-        "getBills",
-        setBills,
-        mapBillFromApi,
-        "bills"
-      ),
-    [setBills, handleIdAction],
-  );
-
-  const unlockBill = useCallback(
-    async (billId) =>
-      handleIdAction(
-        "unlockBill",
-        "billId",
-        billId,
-        "Bill unlocked",
-        "getBills",
-        setBills,
-        mapBillFromApi,
-        "bills"
-      ),
-    [setBills, handleIdAction],
-  );
+   // 8. Bill lifecycle
+  // ✅ Combined into a single useMemo to eliminate the 9-line duplication between lock and unlock
+  const billLockHandlers = useMemo(() => ({
+    lockBill: (billId) => handleIdAction("lockBill", "billId", billId, "Bill locked", "getBills", setBills, mapBillFromApi, "bills"),
+    unlockBill: (billId) => handleIdAction("unlockBill", "billId", billId, "Bill unlocked", "getBills", setBills, mapBillFromApi, "bills"),
+  }), [handleIdAction, setBills]);
 
   // 9. WhatsApp share
   const whatsapp = useCallback(
@@ -528,27 +504,32 @@ export function useAppHandlers(state) {
     [showToast],
   );
 
-    // 10. Import Lifecycle
+      // 10. Import Lifecycle
+  // ✅ Shared helper to eliminate the 9-line duplication between confirm and delete
   const handleImportAction = useCallback(
-    async (action, importId, successMsg, fallbackErrMsg) =>
-      handleIdAction(
-        action,
-        "importId",
-        importId,
-        successMsg,
-        "getMilkImports",
-        setImports,
-        mapImportFromApi,
-        "imports",
-        fallbackErrMsg
-      ),
-    [setImports, handleIdAction],
+    async (action, importId, successMsg, fallbackErrMsg) => {
+      try {
+        await callApi(action, { importId });
+        showToast(successMsg, "success");
+        const res = await callApi("getMilkImports", {});
+        setImports((res.imports || []).map(mapImportFromApi));
+      } catch (err) {
+        showToast(err.message || fallbackErrMsg, "error");
+      }
+    },
+    [showToast, setImports],
   );
 
-   const importActions = useMemo(() => ({
-    confirmMilkImport: (id) => handleImportAction("confirmMilkImport", id, "Import confirmed", "Failed to confirm import"),
-    deleteMilkImport: (id) => handleImportAction("deleteMilkImport", id, "Import deleted", "Failed to delete import"),
-  }), [handleImportAction]);
+  // ✅ These remain as useCallbacks to preserve the final return block's contract
+  const confirmMilkImport = useCallback(
+    async (importId) => handleImportAction("confirmMilkImport", importId, "Import confirmed", "Failed to confirm import"),
+    [handleImportAction],
+  );
+
+  const deleteMilkImport = useCallback(
+    async (importId) => handleImportAction("deleteMilkImport", importId, "Import deleted", "Failed to delete import"),
+    [handleImportAction],
+  );
 
   // 11. Adjustment Lifecycle
   const applyAdjustment = useCallback(
@@ -571,20 +552,18 @@ export function useAppHandlers(state) {
     [showToast, setAdjustments, setBills],
   );
 
-  return useMemo(
+    return useMemo(
     () => ({
       ...customerHandlers,
       ...billingHandlers,
       ...importHandlers,
       ...deliveryHandlers,
       ...adminHandlers,
-      ...importActions,
+      ...billLockHandlers,
       saveCustomer,
       saveImport,
       savePause,
       saveBrand,
-      lockBill,
-      unlockBill,
       whatsapp,
       saveSubscription,
       generateDailyLogs,
@@ -601,12 +580,11 @@ export function useAppHandlers(state) {
       importHandlers,
       deliveryHandlers,
       adminHandlers,
+      billLockHandlers,
       saveCustomer,
       saveImport,
       savePause,
       saveBrand,
-      lockBill,
-      unlockBill,
       whatsapp,
       saveSubscription,
       generateDailyLogs,
@@ -615,7 +593,6 @@ export function useAppHandlers(state) {
       fetchSubscriptionHistory,
       confirmMilkImport,
       deleteMilkImport,
-      importActions,
       applyAdjustment,
     ],
   );

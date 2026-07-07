@@ -29,14 +29,29 @@ export default defineConfig([
     },
   },
 
-  // Netlify serverless functions — Node environment
+  //  Cloudflare Pages functions directory
   {
     files: ["functions/**/*.js"],
     extends: [js.configs.recommended],
     languageOptions: {
-      globals: globals.node,
-      sourceType: "module",
+      globals: {
+        // Cloudflare Pages Functions globals
+        Request: "readonly",
+        Response: "readonly",
+        fetch: "readonly",
+        URL: "readonly",
+        URLSearchParams: "readonly",
+        crypto: "readonly",
+      },
     },
+    // ✅ FIX D7: Ignore build artifacts and test reports to match .gitignore
+    ignores: [
+      "dist/**",
+      "node_modules/**",
+      "playwright-report/**",
+      "test-results/**",
+      "coverage/**",
+    ],
     rules: {
       "no-console": ["warn", { allow: ["warn", "error"] }],
     },

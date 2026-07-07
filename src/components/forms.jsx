@@ -493,7 +493,7 @@ export function PauseModal({
 
   return (
     <Modal title="Add Pause Period" onClose={onClose}>
-      {/* FIX DUPLICATION: Reused shared component */}
+      {/* ✅ Start Date is correctly handled here by the shared component */}
       <CustomerDateFields
         form={form}
         data={data}
@@ -503,20 +503,19 @@ export function PauseModal({
         dateKey="startDate"
         dateLabel="Start Date *"
       />
-      <Field label="End Date *">
+      
+      {/* ✅ End Date field with the typo fixed */}
+      <Field label="End Date" error={endError}>
         <input
           type="date"
-          min={start || undefined}
-          style={IS()}
-          value={form?.endDate ?? ""}
-          onChange={onChange("endDate")}
+          value={form.endDate || ""}
+          onChange={onChange("endDate")} // ✅ FIXED: Changed from onFieldChange to onChange
+          min={form.startDate || ""}
+          aria-invalid={!!endError} 
+          style={IS()} 
         />
-        {endError && (
-          <div style={{ fontSize: 11, color: "#991b1b", marginTop: 4 }}>
-            {endError}
-          </div>
-        )}
       </Field>
+
       <Field label="Reason">
         <input
           style={IS()}

@@ -25,11 +25,10 @@
  * evicts the old cache on the next visit.
  * ============================================================================ */
 
-const CACHE = "milk-v19"; // bumped: precache hashed Vite bundles at install (Fix #12)
+const CACHE = "milk-v20"; 
 const SHELL = [
   "/",
   "/index.html",
-  "/app.js",
   "/app.css",
   "/favicon.svg",
   "/icons.svg",
@@ -131,10 +130,8 @@ self.addEventListener("activate", (e) => {
 
 // ── Fetch: routing strategy ───────────────────────────────────────────────────
 function _isApiCall(url) {
-  return (
-    url.pathname.startsWith("/api") ||
-    url.pathname.includes("/.netlify/functions/")
-  );
+  const path = new URL(url).pathname;
+   return path.startsWith("/api");
 }
 
 async function _fetchAndCache(request) {
