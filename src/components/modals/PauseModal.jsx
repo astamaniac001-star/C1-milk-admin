@@ -1,6 +1,6 @@
 import { Field, Modal, Btn, IS } from "../ui.jsx";
 import { useBusy } from "../../hooks/useBusy.js";
-import { CustomerDateFields } from "./shared.js";
+import { CustomerDateFields } from "./shared";
 
 // fallow-ignore-next-line complexity
 export function PauseModal({

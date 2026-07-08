@@ -33,8 +33,9 @@ export default function Login({ onLogin, error, loading }) {
           <div className="field">
             <label className="field-label">PIN</label>
             <input
-              type="password"
+              type="text"
               inputMode="numeric"
+              autoComplete="one-time-code" 
               maxLength={4}
               value={pin}
               onChange={handleChange}

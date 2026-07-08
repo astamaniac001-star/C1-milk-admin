@@ -1,5 +1,5 @@
 import { Modal, Btn } from "../ui.jsx";
-import { DAYS_OF_WEEK } from "./shared.js";
+import { DAYS_OF_WEEK } from "./shared";
 
 // fallow-ignore-next-line complexity
 export function SubscriptionsListModal({

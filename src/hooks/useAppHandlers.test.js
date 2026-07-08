@@ -147,7 +147,6 @@ describe("useAppHandlers - saveAdjustment", () => {
     await act(async () => {
       await handlers.saveAdjustment();
     });
-
-    expect(toast$).toHaveBeenCalledWith("Fill all fields", "error");
+    expect(toast$).toHaveBeenCalledWith("Customer ID is missing", "error");
   });
 });

@@ -528,118 +528,58 @@ function updateLogEntry(payload) {
  * Required: date (YYYY-MM-DD)
  */
 function bulkUpsertLogs(payload) {
-  if (!payload.date || !/^\d{4}-\d{2}-\d{2}$/.test(payload.date)) {
-    return respond(false, null, {
-      code: "VALIDATION_ERROR",
-      message: "date must be YYYY-MM-DD",
-    });
+  const logs = payload.logs || [];
+  if (!Array.isArray(logs) || logs.length === 0) {
+    return respond(false, null, { code: 'VALIDATION_ERROR', message: 'logs array is required' });
   }
 
-  return withLock(function () {
-    const custSheet = getSheet("CUSTOMERS");
-    const custHdr = buildHeaderMap(custSheet);
-    const custLastRow = custSheet.getLastRow();
-    if (custLastRow < 2) return respond(true, { created: 0, skipped: 0 });
+  const sheet = getSheet(SHEET_NAMES.DAILY_LOGS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const hdr = {};
+  headers.forEach((h, i) => hdr[h] = i);
 
-    const customers = custSheet
-      .getRange(2, 1, custLastRow - 1, custSheet.getLastColumn())
-      .getValues();
+  // Map existing logIds to row indices (1-based for sheet operations)
+  const existingLogs = {};
+  for (let i = 1; i < data.length; i++) {
+    const logId = data[i][hdr["LogId"]];
+    if (logId) existingLogs[logId] = i + 1; 
+  }
 
-    const pauseSheet = getSheet("PAUSE_PERIODS");
-    const pauseHdr = buildHeaderMap(pauseSheet);
-    const pauseLastRow = pauseSheet.getLastRow();
-    const pauses =
-      pauseLastRow >= 2
-        ? pauseSheet
-            .getRange(2, 1, pauseLastRow - 1, pauseSheet.getLastColumn())
-            .getValues()
-        : [];
+  const updates = [];
+  const inserts = [];
 
-    const isPausedOn = (customerId, date) =>
-      pauses.some(
-        (p) =>
-          p[pauseHdr["CustomerId"]] === customerId &&
-          p[pauseHdr["StartDate"]] <= date &&
-          (!p[pauseHdr["EndDate"]] || p[pauseHdr["EndDate"]] >= date),
-      );
+  for (const log of logs) {
+    const row = new Array(headers.length).fill("");
+    row[hdr["CustomerId"]] = log.custId || "";
+    row[hdr["Date"]] = log.date || "";
+    row[hdr["Product"]] = log.product || "";
+    row[hdr["Qty"]] = Number(log.qty) || 0;
+    // Handle boolean conversion for the Delivered column
+    row[hdr["Delivered"]] = log.delivered === true || log.delivered === "true" || log.delivered === "TRUE";
+    row[hdr["Note"]] = log.reason || log.note || "";
+    row[hdr["UpdatedAt"]] = new Date().toISOString();
 
-    const dow = new Date(payload.date + "T00:00:00").getDay();
-    const logSheet = getSheet("DAILY_LOGS");
-    const logHdr = buildHeaderMap(logSheet);
-
-    // Avoid duplicate logs for the same customer+date if this is re-run
-    const existingLastRow = logSheet.getLastRow();
-    const existingKeys = new Set();
-    if (existingLastRow >= 2) {
-      const existing = logSheet
-        .getRange(2, 1, existingLastRow - 1, logSheet.getLastColumn())
-        .getValues();
-      existing.forEach((r) =>
-        existingKeys.add(r[logHdr["CustomerId"]] + "|" + r[logHdr["Date"]]),
-      );
+    if (log.logId && existingLogs[log.logId]) {
+      updates.push({ rowNumber: existingLogs[log.logId], data: row });
+    } else {
+      row[hdr["LogId"]] = log.logId || Utilities.getUuid();
+      row[hdr["CreatedAt"]] = new Date().toISOString();
+      inserts.push(row);
     }
+  }
 
-    const now = Utilities.formatDate(
-      new Date(),
-      "Asia/Kolkata",
-      "yyyy-MM-dd'T'HH:mm:ssXXX",
-    );
-    const newRows = [];
-    let skipped = 0;
+  // Apply updates in batch
+  for (const u of updates) {
+    sheet.getRange(u.rowNumber, 1, 1, headers.length).setValues([u.data]);
+  }
 
-    customers.forEach((c) => {
-      const customerId = c[custHdr["CustomerId"]];
-      const status = c[custHdr["Status"]];
-      const days = safeJsonParse(c[custHdr["DeliveryDays"]], []);
+  // Apply inserts in batch
+  if (inserts.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, inserts.length, headers.length).setValues(inserts);
+  }
 
-      if (status !== "Active") {
-        skipped++;
-        return;
-      }
-      if (days.indexOf(dow) === -1) {
-        skipped++;
-        return;
-      }
-      if (isPausedOn(customerId, payload.date)) {
-        skipped++;
-        return;
-      }
-      if (existingKeys.has(customerId + "|" + payload.date)) {
-        skipped++;
-        return;
-      }
-
-      const row = [];
-      row[logHdr["LogId"]] =
-        "LOG-" + Utilities.getUuid().substring(0, 8).toUpperCase();
-      row[logHdr["CustomerId"]] = customerId;
-      row[logHdr["Date"]] = payload.date;
-      row[logHdr["Product"]] = c[custHdr["Product"]];
-      row[logHdr["Qty"]] = c[custHdr["DailyQty"]];
-      row[logHdr["Delivered"]] = true;
-      row[logHdr["Note"]] = "";
-      row[logHdr["CreatedAt"]] = now;
-      row[logHdr["UpdatedAt"]] = now;
-      newRows.push(row);
-    });
-
-    if (newRows.length > 0) {
-      logSheet
-        .getRange(
-          logSheet.getLastRow() + 1,
-          1,
-          newRows.length,
-          newRows[0].length,
-        )
-        .setValues(newRows);
-    }
-
-    writeActivityLog("bulkUpsertLogs", payload, {
-      created: newRows.length,
-      skipped: skipped,
-    });
-    return respond(true, { created: newRows.length, skipped: skipped });
-  });
+  return respond(true, { updated: updates.length, created: inserts.length });
 }
 
 /**

@@ -1,6 +1,6 @@
 import { Field, Modal, Btn, IS, ActiveCustomerOptions } from "../ui.jsx";
 import { useBusy } from "../../hooks/useBusy.js";
-import { DAYS_OF_WEEK } from "./shared.js";
+import { DAYS_OF_WEEK } from "./shared";
 
 // fallow-ignore-next-line complexity
 export function SubscriptionModal({

@@ -54,6 +54,9 @@ const SHEET_NAMES = {
   SETTINGS: "Settings",
   ACTIVITY_LOG: "ActivityLog",
   SYSTEM_STATE: "SystemState",
+  SUBSCRIPTIONS: "Subscriptions",
+  SUBSCRIPTION_HISTORY: "SubscriptionHistory",
+  CREDIT_NOTES: "CreditNotes",
 };
 
 const TIMEZONE = "Asia/Kolkata";
@@ -693,7 +696,9 @@ const ALLOWED_ACTIONS = new Set([
   "generateDailyLogsForDate",
   "addAdHocLog",
   "getSubscriptionHistory",
+  "addCreditNote",
   "getCreditNotes",
+  "getAdjustments",
   // Customers
   "addCustomer",
   "updateCustomer",
@@ -868,6 +873,22 @@ function doPost(e) {
   // resolve to the implementations defined in Part 5 (Admin.gs).
   try {
     switch (action) {
+      case "getSubscriptions": 
+        return respond(true, getSubscriptions());
+      case "saveSubscription": 
+        return respond(true, saveSubscription(payload));
+      case "getSubscriptionHistory": 
+        return respond(true, getSubscriptionHistory(payload));
+      case "addAdHocLog": 
+        return respond(true, addAdHocLog(payload));
+      case "addCreditNote": 
+        return respond(true, addCreditNote(payload));
+      case "getCreditNotes": 
+        return respond(true, getCreditNotes());
+      case "generateDailyLogsForDate": 
+        return respond(true, generateDailyLogsForDate(payload));
+      case "getAdjustments": 
+        return respond(true, getAdjustments());
       case "getSubscriptions":
         return getSubscriptions(payload);
       case "saveSubscription":

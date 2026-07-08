@@ -74,14 +74,14 @@ export function useBillingHandlers(state) {
         }
       },
       saveAdjustment: async (billIdArg, amountArg, reasonArg) => {
-        const { billId, amount, reason } = getAdjustmentData(
+        const {  amount, reason } = getAdjustmentData(
           billIdArg,
           amountArg,
           reasonArg,
         );
-        const customerId = form.custId || modal.data?.custId || billId;
-        if (!billId || !amount || !reason) {
-          showToast("Fill all fields", "error");
+        const customerId = form.custId || modal.data?.custId;
+         if (!customerId) {
+          showToast("Customer ID is missing", "error");
           return;
         }
         try {

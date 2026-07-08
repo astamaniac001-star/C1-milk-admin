@@ -60,7 +60,7 @@ function getSubscriptions(payload) {
     customerId: row[hdr["CustomerId"]],
     customerName: customers[row[hdr["CustomerId"]]] || "Unknown",
     milkType: row[hdr["MilkType"]],
-    quantity: Number(row[hdr["Quantity"]]),
+    quantity: Number(row[hdr["Qty"]]),
     deliveryDays: JSON.parse(row[hdr["DeliveryDays"]] || "[]"),
     isActive: row[hdr["IsActive"]] === true || row[hdr["IsActive"]] === "TRUE",
     version: Number(row[hdr["Version"]] || 1),
@@ -119,7 +119,7 @@ function saveSubscription(payload) {
       const updated = found.rowValues.slice();
       updated[hdr["CustomerId"]] = payload.customerId;
       updated[hdr["MilkType"]] = payload.milkType;
-      updated[hdr["Quantity"]] = Number(payload.quantity);
+      updated[hdr["Qty"]] = Number(payload.quantity);
       updated[hdr["DeliveryDays"]] = JSON.stringify(payload.deliveryDays);
       updated[hdr["IsActive"]] =
         payload.isActive === true || payload.isActive === "TRUE"
@@ -129,7 +129,7 @@ function saveSubscription(payload) {
       updated[hdr["Version"]] = currentVersion + 1;
 
       // Log the change to the audit trail
-      const oldDetails = `Qty: ${found.rowValues[hdr["Quantity"]]} | Type: ${found.rowValues[hdr["MilkType"]]}`;
+      const oldDetails = `Qty: ${found.rowValues[hdr["Qty"]]} | Type: ${found.rowValues[hdr["MilkType"]]}`;
       const newDetails = `Qty: ${payload.quantity} | Type: ${payload.milkType}`;
       if (oldDetails !== newDetails) {
         logSubscriptionHistory(
@@ -162,7 +162,7 @@ function saveSubscription(payload) {
       newRow[hdr["Id"]] = id;
       newRow[hdr["CustomerId"]] = payload.customerId;
       newRow[hdr["MilkType"]] = payload.milkType;
-      newRow[hdr["Quantity"]] = Number(payload.quantity);
+      newRow[hdr["Qty"]] = Number(payload.quantity);
       newRow[hdr["DeliveryDays"]] = JSON.stringify(payload.deliveryDays);
       newRow[hdr["IsActive"]] =
         payload.isActive === true || payload.isActive === "TRUE"
@@ -240,11 +240,11 @@ function addAdHocLog(payload) {
     newRow[hdr["Date"]] = payload.date;
 
     // Handle Quantity vs Qty column name gracefully
-    const qtyCol = hdr["Quantity"] !== undefined ? "Quantity" : "Qty";
+    const qtyCol = hdr["Qty"] !== undefined ? "Quantity" : "Qty";
     if (hdr[qtyCol] !== undefined)
       newRow[hdr[qtyCol]] = Number(payload.quantity);
 
-    newRow[hdr["Status"]] = "DELIVERED";
+    newRow[hdr["Delivered"]] = "DELIVERED";
     if (hdr["Source"] !== undefined) newRow[hdr["Source"]] = "ADHOC";
     if (hdr["Reason"] !== undefined)
       newRow[hdr["Reason"]] = payload.reason || "";
@@ -374,7 +374,7 @@ function generateDailyLogsForDate(payload) {
         : [];
     const activeCustIds = new Set();
     custs.forEach((row) => {
-      const status = String(row[custHdr["Status"]] || "").toUpperCase();
+      const status = String(row[custhdr["Delivered"]] || "").toUpperCase();
       if (!status || status === "ACTIVE")
         activeCustIds.add(row[custHdr["CustomerId"]]);
     });
@@ -463,7 +463,7 @@ function generateDailyLogsForDate(payload) {
       logRow[logHdr["LogId"]] = Utilities.getUuid();
       logRow[logHdr["CustomerId"]] = custId;
       logRow[logHdr["Date"]] = targetDate;
-      logRow[logHdr["Quantity"]] = Number(row[subHdr["Quantity"]]);
+      logRow[loghdr["Qty"]] = Number(row[subhdr["Qty"]]);
 
       // Map MilkType/Product depending on your DailyLogs schema
       if (logHdr["MilkType"] !== undefined)
@@ -471,7 +471,7 @@ function generateDailyLogsForDate(payload) {
       if (logHdr["Product"] !== undefined)
         logRow[logHdr["Product"]] = row[subHdr["MilkType"]];
 
-      logRow[logHdr["Status"]] = "PENDING";
+      logRow[loghdr["Delivered"]] = "PENDING";
       logRow[logHdr["CreatedAt"]] = now;
       logRow[logHdr["UpdatedAt"]] = now;
 
