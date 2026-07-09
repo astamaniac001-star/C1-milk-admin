@@ -30,8 +30,11 @@ export default function Dashboard({ today, todayLogs = [], bills = [], customers
 
   const deliveredCount = todayLogs.filter((l) => l.delivered).length;
   const skippedCount = todayLogs.filter((l) => !l.delivered).length;
-  const totalLiters = todayLogs.filter((l) => l.delivered).reduce((s, l) => s + l.qty, 0).toFixed(1);
-
+  const totalLiters = todayLogs
+  .filter((l) => l.delivered)
+  .reduce((s, l) => s + l.qty, 0)
+  .toFixed(1);
+  
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       <Section title={`Today's Delivery — ${today}`} action={

@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 const SC = {
   Active: { bg: "#dcfce7", tx: "#166534" }, Paused: { bg: "#fef9c3", tx: "#854d0e" }, Inactive: { bg: "#f3f4f6", tx: "#374151" },
@@ -42,11 +42,13 @@ export function Toast({ msg, type, onClose }) {
 }
 
 export function Modal({ title, onClose, children, wide }) {
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   useEffect(() => {
-    const handleEsc = (e) => { if (e.key === "Escape") onClose(); };
+    const handleEsc = (e) => { if (e.key === "Escape") onCloseRef.current(); };
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
-  }, [onClose]);
+  }, []);
 
   return (
     <div className="modal-overlay" onClick={onClose}>

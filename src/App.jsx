@@ -6,7 +6,6 @@ import  Login  from "./components/login.jsx";
 import { useAuth } from "./hooks/useAuth.js";
 import { useAppState } from "./hooks/useAppState.js";
 import { useAppHandlers } from "./hooks/useAppHandlers.js";
-import { useAppDerived } from "./hooks/useAppDerived.js";
 import { Toast } from "./components/ui.jsx";
 
 export default function App() {
@@ -14,9 +13,7 @@ export default function App() {
 
   const state = useAppState(auth);
   const handlers = useAppHandlers(state);
-  const derived = useAppDerived(state);
-
-  const ctx = { ...state, ...handlers, ...derived, auth };
+  const ctx = { ...state, ...handlers, auth }; 
   
   if (!auth.isAuthenticated) {
     return <Login onLogin={auth.login} error={auth.error} loading={auth.loading} />;
@@ -26,7 +23,7 @@ export default function App() {
     <ErrorBoundary>
       <AppShell 
         tab={state.tab} 
-        today={derived.today} 
+        today={state.today} 
         onTabChange={state.setTab} 
         onLogout={auth.logout}
         loadErrors={state.loadErrors}

@@ -16,6 +16,19 @@ import {
 
 const STATUS_FILTERS = ["All", "Unpaid", "Partial", "Paid"];
 
+// ✅ Extracted style helper to reduce cognitive complexity in the render tree
+const getFilterBtnStyle = (isActive) => ({
+  flex: 1,
+  padding: "6px 0",
+  fontSize: 11,
+  fontWeight: 500,
+  border: "0.5px solid #e5e7eb",
+  borderRadius: 8,
+  cursor: "pointer",
+  background: isActive ? BLUE : "#fff",
+  color: isActive ? "#fff" : "#374151",
+});
+
 function renderPaymentButton(bill, onOpenModal) {
   if (!bill.locked && bill.status !== "Paid") {
     return (
@@ -152,14 +165,14 @@ export default function Billing({
         title="Billing"
         action={
           <div style={{ display: "flex", gap: 6 }}>
+            {/* ✅ FIXED (AI-1 #14): Changed misleading "Generate" label to "Add Credit Note" */}
             <Btn
               small
               variant="secondary"
               onClick={() => onOpenModal("addCreditNote")}
             >
-              Generate
+              Add Credit Note
             </Btn>
-            {/* ✅ FIXED: This now actually generates bills */}
             <Btn small onClick={() => onGenerateBill()}>
               Generate Bills
             </Btn>
@@ -174,27 +187,19 @@ export default function Billing({
           style={IS()}
         />
       </Field>
+      
       <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
         {STATUS_FILTERS.map((s) => (
           <button
             key={s}
             onClick={() => onBillFilterChange(s)}
-            style={{
-              flex: 1,
-              padding: "6px 0",
-              fontSize: 11,
-              fontWeight: 500,
-              border: "0.5px solid #e5e7eb",
-              borderRadius: 8,
-              cursor: "pointer",
-              background: billFilter === s ? BLUE : "#fff",
-              color: billFilter === s ? "#fff" : "#374151",
-            }}
+            style={getFilterBtnStyle(billFilter === s)}
           >
             {s}
           </button>
         ))}
       </div>
+      
       <StatGrid
         items={[
           {
@@ -219,6 +224,7 @@ export default function Billing({
           { label: "Bills", value: bills.length, icon: "📄" },
         ]}
       />
+      
       {filtered.length === 0 ? (
         <Empty msg="No bills match filter" />
       ) : (

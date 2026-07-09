@@ -694,7 +694,7 @@ function applyAdjustment(payload) {
         message: "Cannot apply adjustment to a locked bill",
       });
     }
-
+    
     const adjAmount = Number(adjRow.rowValues[adjHdr["Amount"]]);
     const currentAmount = Number(billRow.rowValues[billHdr["Amount"]]);
     const currentPaid = Number(billRow.rowValues[billHdr["AmountPaid"]]);
@@ -901,7 +901,7 @@ function reconcileBillingLedger(payload) {
     let corrected = 0;
 
     bills.forEach((row, i) => {
-      if (row[billHdr["Locked"]] === true) return; // Rule per diagnostic #9
+      if (row[billHdr["Locked"]] === true) return;
       const billId = row[billHdr["BillId"]];
       const recorded = round2(Number(row[billHdr["AmountPaid"]]));
       const actual = round2(paymentsByBill[billId] || 0);
@@ -909,10 +909,11 @@ function reconcileBillingLedger(payload) {
       if (recorded !== actual) {
         const rowIndex = i + 2;
         const amount = Number(row[billHdr["Amount"]]);
-        const newStatus = deriveStatus(amount, actual, "Reconciled");
+        const cappedActual = Math.min(actual, amount);
+        const newStatus = deriveStatus(amount, cappedActual, "Reconciled");
         billSheet
           .getRange(rowIndex, billHdr["AmountPaid"] + 1)
-          .setValue(actual);
+          .setValue(cappedActual);
         billSheet.getRange(rowIndex, billHdr["Status"] + 1).setValue(newStatus);
         billSheet
           .getRange(rowIndex, billHdr["Version"] + 1)
@@ -933,16 +934,3 @@ function reconcileBillingLedger(payload) {
 // NOTE: findRowByTwoColumns() is intentionally NOT defined in this file.
 // It is owned by Part 4 (Core.gs). Declaring it here would cause a duplicate
 // function declaration crash at Apps Script deployment time.
-function getAdjustments() {
-  const sheet = getSheet(SHEET_NAMES.ADJUSTMENTS);
-  if (!sheet) return [];
-  const data = sheet.getDataRange().getValues();
-  if (data.length <= 1) return [];
-  
-  const headers = data[0];
-  return data.slice(1).map(row => {
-    const obj = {};
-    headers.forEach((h, i) => obj[h] = row[i]);
-    return obj;
-  });
-}

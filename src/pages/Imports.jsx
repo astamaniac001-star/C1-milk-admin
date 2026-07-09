@@ -31,7 +31,7 @@ export default function Imports({
   const totalCost = filtered
     .filter((i) => i.status === "Confirmed")
     .reduce((s, i) => s + i.total, 0);
-  const avgRate = totalQty > 0 ? totalCost / totalQty : 0;
+  const avgRate = totalQty > 0 ? (totalCost / totalQty).toFixed(2) : "0.00";
 
   return (
     <div>

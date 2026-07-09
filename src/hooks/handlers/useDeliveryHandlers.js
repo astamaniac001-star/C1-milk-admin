@@ -34,7 +34,7 @@ export function useDeliveryHandlers(state) {
             idempotencyKey: Date.now().toString(),
           };
           await callApi("bulkUpsertLogs", payload);
-          const res = await callApi("getDailyLogs", { date: getToday() });
+          const res = await callApi("getDailyLogs", { date: logDate || getToday() });
           setLogs((res.logs || []).map(mapLogFromApi));
           showToast("Logs saved", "success");
         } catch (e) {

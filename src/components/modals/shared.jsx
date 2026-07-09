@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { Field, IS, ActiveCustomerOptions } from "../ui.jsx";
 
 export const DAYS_OF_WEEK = [

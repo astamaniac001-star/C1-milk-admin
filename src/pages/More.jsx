@@ -123,6 +123,7 @@ function AdjustmentItem({ a, onApplyAdj, resolveCustomer }) {
         </div>
         <AdjustmentActions
           applied={!!a.applied}
+          disableApply={!a.applied && !a.billId}
           onApply={() => onApplyAdj(a.id, a.billId)}
         />
       </div>

@@ -1,5 +1,5 @@
 // src/hooks/useAuth.js
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { callApi } from "../lib/api.js";
 
 // SECURITY: tokens live in sessionStorage (not localStorage) so a stolen
@@ -24,23 +24,46 @@ export function useAuth() {
     setError(null);
     try {
       const data = await callApi("verifyPIN", { pin });
-      STORE.setItem(TOKEN_KEY, data.token);
-      STORE.setItem(SECRET_KEY, data.sessionSecret);
-      setToken(data.token);
-      setSessionSecret(data.sessionSecret);
+      
+      // 🛡️ Defensive guard: prevent writing "undefined" to storage if backend misbehaves
+      if (data.token) STORE.setItem(TOKEN_KEY, data.token);
+      if (data.sessionSecret) STORE.setItem(SECRET_KEY, data.sessionSecret);
+      
+      setToken(data.token ?? null);
+      setSessionSecret(data.sessionSecret ?? null);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Login failed");
     } finally {
       setLoading(false);
     }
   };
 
-  const logout = () => {
+  // Wrap in useCallback so the event listener doesn't constantly re-bind
+  const logout = useCallback(() => {
     STORE.removeItem(TOKEN_KEY);
     STORE.removeItem(SECRET_KEY);
+    
+    // Clear localStorage too, just in case legacy tokens exist from older versions
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(SECRET_KEY);
+    
     setToken(null);
     setSessionSecret(null);
-  };
+  }, []);
+
+  // 🚀 Listen for graceful session expiry dispatched by src/lib/api.js
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      console.warn("Session expired or unauthorized. Logging out gracefully.");
+      logout();
+    };
+
+    window.addEventListener("auth:expired", handleAuthExpired);
+    
+    return () => {
+      window.removeEventListener("auth:expired", handleAuthExpired);
+    };
+  }, [logout]);
 
   return {
     token,

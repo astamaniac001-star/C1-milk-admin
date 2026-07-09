@@ -13,7 +13,7 @@ import {
 } from "../lib/api.js";
 import { getToday } from "../lib/utils.js";
 
-export function useEntityStore() {
+export function useEntityStore(token) {
   // Removed unused _token parameter
   const [customers, setCustomers] = useState([]);
   const [imports, setImports] = useState([]);
@@ -40,11 +40,12 @@ export function useEntityStore() {
       setLoadErrors((prev) =>
         prev.includes(action) ? prev : [...prev, action],
       );
-      return [];
+      return null;
     }
   }, []);
 
   useEffect(() => {
+    if (!token) return;
     const fetchData = async () => {
       const [custs, bils, imps, lgs, adjs, paus, brnds, subs, cns] =
         await Promise.all([
@@ -58,19 +59,18 @@ export function useEntityStore() {
           safeFetch("getSubscriptions", {}, "subscriptions"),
           safeFetch("getCreditNotes", {}, "creditNotes"),
         ]);
-
-      setCustomers(custs.map(mapCustomerFromApi));
-      setBills(bils.map(mapBillFromApi));
-      setImports(imps.map(mapImportFromApi));
-      setLogs(lgs.map(mapLogFromApi));
-      setAdjustments(adjs.map(mapAdjustmentFromApi));
-      setPauses(paus.map(mapPauseFromApi));
-      setBrands(brnds.map(mapBrandFromApi));
-      setSubscriptions(subs.map(mapSubscriptionFromApi));
-      setCreditNotes(cns.map(mapCreditNoteFromApi));
+      if (custs !== null) setCustomers(custs.map(mapCustomerFromApi));
+      if (bils !== null) setBills(bils.map(mapBillFromApi));
+      if (imps !== null) setImports(imps.map(mapImportFromApi));
+      if (lgs !== null) setLogs(lgs.map(mapLogFromApi));
+      if (adjs !== null) setAdjustments(adjs.map(mapAdjustmentFromApi));
+      if (paus !== null) setPauses(paus.map(mapPauseFromApi));
+      if (brnds !== null) setBrands(brnds.map(mapBrandFromApi));
+      if (subs !== null) setSubscriptions(subs.map(mapSubscriptionFromApi));
+      if (cns !== null) setCreditNotes(cns.map(mapCreditNoteFromApi));
     };
     fetchData();
-  }, [safeFetch, refreshKey]);
+  }, [token,safeFetch, refreshKey]);
 
   const fetchLogs = useCallback(async (date) => {
     try {

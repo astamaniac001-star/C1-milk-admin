@@ -872,9 +872,9 @@ function doPost(e) {
   // healthCheck/runDiagnostics/getSheetNamesAction/eraseAllData/runMigration
   // resolve to the implementations defined in Part 5 (Admin.gs).
   try {
-    switch (action) {
+    switch(action) {
       case "getSubscriptions": 
-        return respond(true, getSubscriptions());
+        return respond(true, getSubscriptions(payload));
       case "saveSubscription": 
         return respond(true, saveSubscription(payload));
       case "getSubscriptionHistory": 
@@ -882,19 +882,19 @@ function doPost(e) {
       case "addAdHocLog": 
         return respond(true, addAdHocLog(payload));
       case "addCreditNote": 
-        return respond(true, addCreditNote(payload));
+        return addCreditNote(payload);
       case "getCreditNotes": 
-        return respond(true, getCreditNotes());
+        return getCreditNotes(); 
       case "generateDailyLogsForDate": 
         return respond(true, generateDailyLogsForDate(payload));
       case "getAdjustments": 
         return respond(true, getAdjustments());
-      case "getSubscriptions":
-        return getSubscriptions(payload);
       case "saveSubscription":
         return saveSubscription(payload);
       case "generateDailyLogsForDate":
         return generateDailyLogsForDate(payload);
+      case "getBillText": 
+        return getBillText(payload);
       case "addCustomer":
         return addCustomer(payload);
       case "updateCustomer":
@@ -947,12 +947,10 @@ function doPost(e) {
         return getMilkImportSummary(payload);
       case "getDailyInventory":
         return getDailyInventory(payload);
-      case "getAdjustments":
-        return getAdjustments();
       case "getPauses":
-        return getPauses();
+        return respond(true, getPauses());
       case "getBrands":
-        return getBrands();
+        return respond(true, getBrands());
       case "reconcileMilkInventory":
         return reconcileMilkInventory(payload);
       case "addMilkBrand":

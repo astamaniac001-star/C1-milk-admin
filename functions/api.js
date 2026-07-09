@@ -115,7 +115,10 @@ async function callAppsScript(env, body) {
   console.warn("[proxy] Calling upstream with action:", body.action);
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+    
+    // ⏱️ INCREASED TIMEOUT: Apps Script operations like generateMonthBill 
+    // or reconcileBillingLedger can take 10-20 seconds. 8s was too short.
+    const timeoutId = setTimeout(() => controller.abort(), 25000); 
 
     const response = await fetch(env.APPS_SCRIPT_URL, {
       method: "POST",
@@ -201,9 +204,12 @@ export async function onRequestPost(context) {
   if (validation instanceof Response) return validation; // It's an error response
 
   const body = validation.body;
+  
+  // 🔒 Inject secret and IP hash so the backend trusts this request
   body.appSecret = env.APP_SECRET;
   body.ipHash = await hashIP(getClientIP(request));
 
   const result = await callAppsScript(env, body);
+  
   return handleUpstreamResponse(result, corsHeaders);
 }

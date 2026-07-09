@@ -43,6 +43,7 @@ export function mapImportFromApi(i) {
     supplier: i.supplierName,
     date: i.date,
     status: i.status,
+    version: i.version || i.Version || 1,
   };
 }
 
@@ -178,10 +179,10 @@ export function mapPaymentToApi(billId, amount, opts = {}) {
 // localStorage lets us read any tokens set by previous app versions before
 // the user logs out and back in — they get carried forward without a forced
 // re-auth on first request after the upgrade.
-function readToken() {
-  return sessionStorage.getItem("token") || localStorage.getItem("token");
+export function readToken() {
+  return sessionStorage.getItem("token") ;
 }
-function readSecret() {
+export function readSecret() {
   return (
     sessionStorage.getItem("sessionSecret") ||
     localStorage.getItem("sessionSecret")
@@ -209,15 +210,10 @@ export async function callApi(action, payload = {}) {
       const errorCode =
         result.error?.code || result.error?.status || result.error;
       // 401 Interceptor: If backend rejects token, force logout.
-      if (
-        errorCode === "UNAUTHORIZED" ||
-        errorCode === "SESSION_EXPIRED" ||
-        errorCode === "INVALID_TOKEN" ||
-        errorCode === 401
-      ) {
+      if (errorCode === "UNAUTHORIZED" || errorCode === "SESSION_EXPIRED" || errorCode === "INVALID_TOKEN") {
         sessionStorage.removeItem("token");
-        localStorage.removeItem("token");
-        window.location.reload();
+        sessionStorage.removeItem("sessionSecret");
+        window.dispatchEvent(new CustomEvent("auth:expired")); 
         return new Promise(() => {});
       }
       throw new Error(result.error?.message || "Unknown API error");

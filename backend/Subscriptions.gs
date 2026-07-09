@@ -192,7 +192,7 @@ function saveSubscription(payload) {
  * getSubscriptionHistory — fetches the audit trail for a specific subscription.
  */
 function getSubscriptionHistory(payload) {
-  const sheet = getSheet("SubscriptionHistory"); // ✅ Updated to PascalCase
+  const sheet = getSheet(SHEET_NAMES.SUBSCRIPTION_HISTORY || "SubscriptionHistory");
   const hdr = buildHeaderMap(sheet);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return respond(true, { history: [] });
@@ -209,9 +209,10 @@ function getSubscriptionHistory(payload) {
       details: row[hdr["Details"]],
       timestamp: row[hdr["Timestamp"]],
     }))
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-  return respond(true, { history });
+    history.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    return respond(true, { 
+    history: history.slice(0, 50) 
+  });
 }
 
 /**
@@ -240,11 +241,9 @@ function addAdHocLog(payload) {
     newRow[hdr["Date"]] = payload.date;
 
     // Handle Quantity vs Qty column name gracefully
-    const qtyCol = hdr["Qty"] !== undefined ? "Quantity" : "Qty";
-    if (hdr[qtyCol] !== undefined)
-      newRow[hdr[qtyCol]] = Number(payload.quantity);
-
-    newRow[hdr["Delivered"]] = "DELIVERED";
+    const qtyCol = hdr["Qty"] !== undefined ? "Qty" : "Quantity";
+     if (qtyCol && hdr[qtyCol] !== undefined) newRow[hdr[qtyCol]] = Number(payload.quantity);
+      newRow[hdr["Delivered"]] = true; 
     if (hdr["Source"] !== undefined) newRow[hdr["Source"]] = "ADHOC";
     if (hdr["Reason"] !== undefined)
       newRow[hdr["Reason"]] = payload.reason || "";
@@ -374,9 +373,8 @@ function generateDailyLogsForDate(payload) {
         : [];
     const activeCustIds = new Set();
     custs.forEach((row) => {
-      const status = String(row[custhdr["Delivered"]] || "").toUpperCase();
-      if (!status || status === "ACTIVE")
-        activeCustIds.add(row[custHdr["CustomerId"]]);
+    const status = String(row[custHdr["Status"]] || "").toUpperCase();
+      if (status === "ACTIVE") activeCustIds.add(row[custHdr["CustomerId"]]);
     });
 
     // 3. Fetch Existing Logs for targetDate (to prevent overwriting manual admin entries)
@@ -463,7 +461,7 @@ function generateDailyLogsForDate(payload) {
       logRow[logHdr["LogId"]] = Utilities.getUuid();
       logRow[logHdr["CustomerId"]] = custId;
       logRow[logHdr["Date"]] = targetDate;
-      logRow[loghdr["Qty"]] = Number(row[subhdr["Qty"]]);
+      logRow[logHdr["Qty"]] = Number(row[subHdr["Qty"]]);
 
       // Map MilkType/Product depending on your DailyLogs schema
       if (logHdr["MilkType"] !== undefined)
@@ -471,7 +469,7 @@ function generateDailyLogsForDate(payload) {
       if (logHdr["Product"] !== undefined)
         logRow[logHdr["Product"]] = row[subHdr["MilkType"]];
 
-      logRow[loghdr["Delivered"]] = "PENDING";
+      logRow[logHdr["Delivered"]] = "PENDING";
       logRow[logHdr["CreatedAt"]] = now;
       logRow[logHdr["UpdatedAt"]] = now;
 

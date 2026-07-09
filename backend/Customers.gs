@@ -529,6 +529,7 @@ function updateLogEntry(payload) {
  */
 function bulkUpsertLogs(payload) {
   const logs = payload.logs || [];
+  const nowIST = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd'T'HH:mm:ssXXX");
   if (!Array.isArray(logs) || logs.length === 0) {
     return respond(false, null, { code: 'VALIDATION_ERROR', message: 'logs array is required' });
   }
@@ -545,6 +546,8 @@ function bulkUpsertLogs(payload) {
     const logId = data[i][hdr["LogId"]];
     if (logId) existingLogs[logId] = i + 1; 
   }
+  return withLock(() => {
+    const sheet = getSheet(SHEET_NAMES.DAILY_LOGS);
 
   const updates = [];
   const inserts = [];
@@ -558,13 +561,13 @@ function bulkUpsertLogs(payload) {
     // Handle boolean conversion for the Delivered column
     row[hdr["Delivered"]] = log.delivered === true || log.delivered === "true" || log.delivered === "TRUE";
     row[hdr["Note"]] = log.reason || log.note || "";
-    row[hdr["UpdatedAt"]] = new Date().toISOString();
+    row[hdr["UpdatedAt"]] = nowIST;
 
     if (log.logId && existingLogs[log.logId]) {
       updates.push({ rowNumber: existingLogs[log.logId], data: row });
     } else {
       row[hdr["LogId"]] = log.logId || Utilities.getUuid();
-      row[hdr["CreatedAt"]] = new Date().toISOString();
+      row[hdr["CreatedAt"]] = nowIST;
       inserts.push(row);
     }
   }
@@ -580,6 +583,7 @@ function bulkUpsertLogs(payload) {
   }
 
   return respond(true, { updated: updates.length, created: inserts.length });
+  });
 }
 
 /**
