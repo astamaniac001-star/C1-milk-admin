@@ -10,14 +10,17 @@ export default defineConfig({
     include: ["src/**/*.test.{js,jsx}", "functions/**/*.test.{js,jsx}"],
     coverage: {
       provider: "v8",
-      reporter: ["text", "json"],
+      reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
-      include: ["src/lib/**/*.js"],
-      exclude: ["src/lib/**/*.test.js"],
+      // FIX: Expanded coverage to include ALL source files, not just src/lib/
+      include: ["src/**/*.{js,jsx}"],
+      exclude: ["src/test/**", "src/**/*.test.{js,jsx}", "node_modules/**"],
     },
   },
   build: {
     target: "es2020",
+    // FIX: Enable hidden sourcemaps for production debugging
+    sourcemap: "hidden",
     rollupOptions: {
       output: {
         manualChunks(id) {

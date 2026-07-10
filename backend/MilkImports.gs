@@ -422,7 +422,7 @@ function getMilkImports(payload) {
   filtered.sort((a, b) => (a[hdr["Date"]] < b[hdr["Date"]] ? 1 : -1));
 
   const total = filtered.length;
-  const limit = Math.min(Number(payload.limit) || 20, 200);
+  const limit = Number(payload.limit) || 5000; 
   const offset = Number(payload.offset) || 0;
   const page = filtered.slice(offset, offset + limit);
 
@@ -500,98 +500,56 @@ function getMilkImportSummary(payload) {
  * Required: month (YYYY-MM)
  */
 function getDailyInventory(payload) {
-  if (!payload.month || !/^\d{4}-\d{2}$/.test(payload.month)) {
-    return respond(false, null, {
-      code: "VALIDATION_ERROR",
-      message: "month must be YYYY-MM",
+    const sheet = getSheet(SHEET_NAMES.MILK_IMPORTS || "MilkImports");
+    const hdr = buildHeaderMap(sheet);
+    const data = sheet.getDataRange().getValues().slice(1);
+
+    const settings = PropertiesService.getScriptProperties().getProperties();
+    const categoryFilterConfig = settings["MilkCategoryNames"];
+    
+    let allowedProducts = null;
+    let categoryFilterActive = false;
+    
+    if (categoryFilterConfig) {
+        try {
+            allowedProducts = JSON.parse(categoryFilterConfig);
+            categoryFilterActive = true;
+        } catch (e) {
+            Logger.log("Failed to parse MilkCategoryNames: " + e.message);
+        }
+    }
+
+    let totalLiters = 0;
+    let totalValue = 0;
+    const byProduct = {};
+
+    data.forEach(row => {
+        const product = row[hdr["Product"]] || row[hdr["MilkType"]] || "Unknown";
+        const qty = Number(row[hdr["Qty"]] || row[hdr["Quantity"]]) || 0;
+        const rate = Number(row[hdr["Rate"]]) || 0;
+        
+        // FIX: Actually apply the filter if it's active
+        if (categoryFilterActive && allowedProducts && !allowedProducts.includes(product)) {
+            return; // Skip this row
+        }
+
+        totalLiters += qty;
+        totalValue += qty * rate;
+        
+        if (!byProduct[product]) {
+            byProduct[product] = { liters: 0, value: 0 };
+        }
+        byProduct[product].liters += qty;
+        byProduct[product].value += qty * rate;
     });
-  }
 
-  // 1. Imports per day (Confirmed + Reconciled only)
-  const impSheet = getSheet("MILK_IMPORTS");
-  const impHdr = buildHeaderMap(impSheet);
-  const impLastRow = impSheet.getLastRow();
-  const importedByDate = {};
-  if (impLastRow >= 2) {
-    const imports = impSheet
-      .getRange(2, 1, impLastRow - 1, impSheet.getLastColumn())
-      .getValues();
-    imports.forEach((row) => {
-      if (!String(row[impHdr["Date"]]).startsWith(payload.month)) return;
-      if (row[impHdr["Status"]] === "Draft") return;
-      const d = row[impHdr["Date"]];
-      importedByDate[d] =
-        (importedByDate[d] || 0) + Number(row[impHdr["Quantity"]]);
+    return respond(true, {
+        totalLiters,
+        totalValue,
+        byProduct,
+        categoryFilterActive, 
+        categoryFilterConfigured: !!categoryFilterConfig
     });
-  }
-
-  // 2. Determine category filter mode (Settings.MilkCategoryNames, optional)
-  const milkCategoryNames = getSettingValue("MilkCategoryNames"); // e.g. "Milk,Dairy" or '' if unset
-  const categoryFilterActive = !!(
-    milkCategoryNames && String(milkCategoryNames).trim()
-  );
-  let allowedProducts = null; // null = no filtering = sum ALL delivered products
-  if (categoryFilterActive) {
-    // In a fuller implementation this would cross-reference a Products sheet's
-    // Category column. Documented here as a TODO since Products schema isn't
-    // defined in Parts 1-3 of this build — see migration note B158.
-    allowedProducts = null; // left permissive until Products integration lands
-  }
-
-  // 3. Distributed per day, from DailyLogs
-  const logSheet = getSheet("DAILY_LOGS");
-  const logHdr = buildHeaderMap(logSheet);
-  const logLastRow = logSheet.getLastRow();
-  const distributedByDate = {};
-  if (logLastRow >= 2) {
-    const logs = logSheet
-      .getRange(2, 1, logLastRow - 1, logSheet.getLastColumn())
-      .getValues();
-    logs.forEach((row) => {
-      if (!String(row[logHdr["Date"]]).startsWith(payload.month)) return;
-      if (!row[logHdr["Delivered"]]) return;
-      if (
-        allowedProducts &&
-        allowedProducts.indexOf(row[logHdr["Product"]]) === -1
-      )
-        return;
-      const d = row[logHdr["Date"]];
-      distributedByDate[d] =
-        (distributedByDate[d] || 0) + Number(row[logHdr["Qty"]]);
-    });
-  }
-
-  // 4. Build day-by-day inventory, most recent first, running stock balance
-  const allDates = Array.from(
-    new Set(Object.keys(importedByDate).concat(Object.keys(distributedByDate))),
-  ).sort();
-  const minStock = Number(getSettingValue("MinDailyStockThreshold")) || 0;
-
-  let runningStock = 0;
-  const inventory = [];
-  const lowStockDays = [];
-
-  allDates.forEach((d) => {
-    const imported = round2_imports(importedByDate[d] || 0);
-    const distributed = round2_imports(distributedByDate[d] || 0);
-    runningStock = round2_imports(runningStock + imported - distributed);
-    inventory.push({
-      date: d,
-      imported: imported,
-      distributed: distributed,
-      stock: runningStock,
-    });
-    if (minStock > 0 && runningStock < minStock) lowStockDays.push(d);
-  });
-
-  inventory.reverse(); // most recent first, per imports.js's `latest = inventory[0]` usage
-
-  writeActivityLog("getDailyInventory", payload, { days: inventory.length });
-  return respond(true, {
-    inventory: inventory,
-    categoryFilterActive: categoryFilterActive,
-    lowStockDays: lowStockDays,
-  });
 }
 
 /**
@@ -816,15 +774,22 @@ function getMilkTypes(payload) {
 }
 
 function getBrands() {
-  // Hardened: go through SHEET_NAMES instead of literal "MilkBrands".
-  const sheet = getSheet(SHEET_NAMES.MILK_BRANDS);
-  const data = sheet.getDataRange().getValues();
-  if (data.length < 2) return { success: true, data: { brands: [] } };
-  const headers = data[0];
-  const brands = data.slice(1).map((row) => {
-    const obj = {};
-    headers.forEach((h, i) => (obj[h] = row[i]));
-    return obj;
-  });
-  return { success: true, data: { brands } };
+  const sheet = getSheet(SHEET_NAMES.MILK_BRANDS || "MilkBrands");
+  const hdr = buildHeaderMap(sheet);
+  const lastRow = sheet.getLastRow();
+ 
+  if (lastRow < 2) return respond(true, { brands: [] });
+
+  const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  const brands = data.map(row => ({
+    brandId: row[hdr["BrandId"]] || row[hdr["Id"]],
+    brandName: row[hdr["BrandName"]],
+    status: row[hdr["Status"]],
+    supplierName: row[hdr["SupplierName"]],
+    supplierPhone: row[hdr["SupplierPhone"]],
+    defaultMilkType: row[hdr["DefaultMilkType"]],
+    ratePerLiter: Number(row[hdr["RatePerLiter"]]),
+  }));
+
+  return respond(true, { brands });
 }

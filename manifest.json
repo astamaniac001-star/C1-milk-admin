@@ -1,18 +1,22 @@
 {
-  "id": "/",
-  "name": "C1 Milk Delivery Admin",
+  "name": "C1 Milk Admin",
   "short_name": "C1 Milk",
-  "description": "Milk delivery management system for customers, billing, imports and daily operations.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#ffffff",
   "theme_color": "#1e40af",
+  "background_color": "#ffffff",
   "icons": [
     {
-      "src": "/apple-touch-icon.png",
-      "sizes": "180x180",
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
@@ -20,12 +24,12 @@
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable"
     },
     {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
       "purpose": "any"
     }
   ]

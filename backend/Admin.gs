@@ -657,73 +657,46 @@ const SHEETS_TO_ERASE = [
  * Required: confirmationCode, appSecret
  */
 function eraseAllData(payload) {
-  if (payload.confirmationCode !== ERASE_CONFIRMATION_CODE) {
-    return respond(false, null, {
-      code: "VALIDATION_ERROR",
-      message: "confirmationCode is required and must match exactly",
-    });
-  }
+    if (!payload || payload.confirmationCode !== "ERASE_ALL_DATA" || !payload.appSecret) {
+        return respond(false, null, { code: "UNAUTHORIZED", message: "Invalid confirmation" });
+    }
+    
+    const expectedSecret = PropertiesService.getScriptProperties().getProperty("APP_SECRET");
+    if (payload.appSecret !== expectedSecret) {
+        return respond(false, null, { code: "UNAUTHORIZED", message: "Invalid appSecret" });
+    }
 
-  const expectedSecret =
-    PropertiesService.getScriptProperties().getProperty("APP_SECRET");
-  if (!expectedSecret || payload.appSecret !== expectedSecret) {
-    return respond(false, null, {
-      code: "FORBIDDEN",
-      message:
-        "Invalid app secret — erasure requires direct confirmation, not just a valid session",
-    });
-  }
+    const sheetsToErase = [
+        SHEET_NAMES.CUSTOMERS, SHEET_NAMES.SUBSCRIPTIONS, SHEET_NAMES.DAILY_LOGS,
+        SHEET_NAMES.BILLS, SHEET_NAMES.PAYMENTS, SHEET_NAMES.MILK_IMPORTS,
+        SHEET_NAMES.ADJUSTMENTS, SHEET_NAMES.CREDIT_NOTES, SHEET_NAMES.PAUSES,
+        SHEET_NAMES.ACTIVITY_LOG, SHEET_NAMES.SESSIONS, SHEET_NAMES.SYSTEM_STATE
+    ];
 
-  return withLock(function () {
     const results = {};
+    let hasErrors = false; // FIX: Track if any sheet failed
 
-    SHEETS_TO_ERASE.forEach(function (sheetKey) {
-      try {
-        const sheet = getSheet(sheetKey);
-        const lastRow = sheet.getLastRow();
-        const lastCol = sheet.getLastColumn();
-        if (lastRow > 1 && lastCol > 0) {
-          sheet.getRange(2, 1, lastRow - 1, lastCol).clearContent();
-          results[sheetKey] = { rowsCleared: lastRow - 1 };
-        } else {
-          results[sheetKey] = { rowsCleared: 0 };
+    sheetsToErase.forEach(name => {
+        try {
+            const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+            if (sheet) {
+                const lastRow = sheet.getLastRow();
+                if (lastRow > 1) {
+                    // FIX: Use batch deletion instead of clear() or looping deleteRow
+                    sheet.deleteRows(2, lastRow - 1);
+                }
+                results[name] = "cleared";
+            } else {
+                results[name] = "not_found";
+            }
+        } catch (e) {
+            results[name] = "error: " + e.message;
+            hasErrors = true; 
         }
-      } catch (e) {
-        results[sheetKey] = { error: e.message };
-      }
     });
 
-    // Clear settings cache since this is a system-wide reset moment
-    CacheService.getScriptCache().removeAll(
-      [
-        "PINSalt",
-        "PINHash",
-        "SchemaVersion",
-        "APIVersion",
-        "MinDailyStockThreshold",
-        "MilkCategoryNames",
-      ].map(function (k) {
-        return SETTINGS_CACHE_KEY_PREFIX + k;
-      }),
-    );
-
-    // Log this one to the spreadsheet's own Logger AND attempt an
-    // ActivityLog write even though ActivityLog itself was just cleared —
-    // this becomes the first row of the new log, which is appropriate.
-    writeActivityLog(
-      "eraseAllData",
-      { sheetsErased: SHEETS_TO_ERASE },
-      results,
-    );
-    Logger.log(
-      "[eraseAllData] DESTRUCTIVE OPERATION COMPLETED at " +
-        nowISTTimestamp() +
-        ": " +
-        JSON.stringify(results),
-    );
-
-    return respond(true, { erased: results, timestamp: nowISTTimestamp() });
-  });
+    // FIX: Return success: false if any sheet errored
+    return respond(!hasErrors, results, hasErrors ? { code: "PARTIAL_FAILURE", message: "Some sheets failed to clear" } : null);
 }
 
 // ----------------------------------------------------------------------------
@@ -767,6 +740,16 @@ const SCHEMA_DEFINITIONS = {
     "EndDate",
     "Reason",
     "CreatedAt",
+  ],
+  SUBSCRIPTIONS: [
+    "Id", "CustomerId", "MilkType", "Qty", "DeliveryDays", "IsActive", 
+    "Version", "IdempotencyKey", "CreatedAt", "UpdatedAt"
+  ],
+  SUBSCRIPTION_HISTORY: [
+    "Id", "SubscriptionId", "Action", "Details", "Timestamp"
+  ],
+  CREDIT_NOTES: [
+    "Id", "CustomerId", "BillId", "Amount", "Reason", "CreatedAt", "IdempotencyKey"
   ],
   BILLS: [
     "BillId",

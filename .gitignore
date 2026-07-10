@@ -31,4 +31,9 @@ coverage
 
 # Local Vercel folder
 .vercel
-
+# Playwright & Test Artifacts
+/playwright-report/
+/test-results/
+/.last-run.json
+.vite/
+.DS_Store

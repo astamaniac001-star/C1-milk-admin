@@ -3,21 +3,31 @@ import { mapBillFromApi, callApi } from "../../lib/api.js";
 import { useHelpers } from "./shared.js";
 
 export function useBillOperations(state) {
-  const { customers, setBills } = state;
+  // FIX (AI-3): Destructure `subscriptions` from state so we can look up the correct rate
+  const { customers, subscriptions, setBills } = state; 
   const { showToast, handleIdAction } = useHelpers(state);
 
   const generateMonthlyBills = useCallback(async (month) => {
     try {
       const activeCustomers = customers.filter((c) => c.status === "Active");
+      
       const results = await Promise.allSettled(
-        activeCustomers.map((c) =>
-          callApi("generateMonthBill", { customerId: c.id, month })
-        )
+        activeCustomers.map((c) => {
+          // FIX (AI-3): Look up the active subscription for this customer to get the correct rate.
+          // Fallback to the customer's direct rate, then to 32 if truly unknown.
+          const sub = subscriptions?.find(s => s.customerId === c.id && s.isActive !== false);
+          const rate = sub?.ratePerLiter || c.ratePerLiter || 32; 
+          
+          return callApi("generateMonthBill", { 
+            customerId: c.id, 
+            month,
+            ratePerLiter: rate // Pass the dynamic rate to the backend
+          });
+        })
       );
       
       const failedCount = results.filter((r) => r.status === "rejected").length;
       if (failedCount > 0) {
-        // 🚨 FIXED BUG: Changed toast$ to showToast
         showToast(`Generated bills, but ${failedCount} failed. Check logs.`, "warning");
       } else {
         showToast("All monthly bills generated successfully!", "success");
@@ -28,7 +38,7 @@ export function useBillOperations(state) {
     } catch (e) {
       showToast(e.message, "error");
     }
-  }, [customers, setBills, showToast]);
+  }, [customers, subscriptions, setBills, showToast]); // Added `subscriptions` to dependencies
 
   const lockBill = useCallback((billId) =>
     handleIdAction("lockBill", "billId", billId, "Bill locked", "getBills", setBills, mapBillFromApi, "bills"),

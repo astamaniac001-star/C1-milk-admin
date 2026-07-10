@@ -86,13 +86,13 @@ function validateAdjustmentPayload(payload) {
 // ----------------------------------------------------------------------------
 
 function deriveStatus(amount, amountPaid, billLifecycleState) {
-  // billLifecycleState is currently unused but kept for future states
-  // (e.g. 'Disputed', 'WrittenOff') without changing the call signature.
-  const a = round2(amount);
-  const p = round2(amountPaid);
-  if (p <= 0) return "Unpaid";
-  if (p >= a) return "Paid";
-  return "Partial";
+    const a = round2(amount);
+    const p = round2(amountPaid);
+    
+    if (a <= 0) return "Paid";
+    if (p <= 0) return "Unpaid";
+    if (p >= a) return "Paid";
+    return "Partial";
 }
 
 // ----------------------------------------------------------------------------
@@ -589,54 +589,56 @@ function recordPayment(payload) {
  * Required: customerId, amount (non-zero), reason
  * Optional: date
  */
-function addAdjustment(payload) {
-  const v = validateAdjustmentPayload(payload);
-  if (!v.valid)
-    return respond(false, null, {
-      code: "VALIDATION_ERROR",
-      message: v.errors.join("; "),
+function applyAdjustment(payload) {
+    if (!payload.adjustmentId || !payload.billId) {
+        return respond(false, null, { code: "VALIDATION_ERROR", message: "Missing IDs" });
+    }
+
+    return withLock(() => {
+        const adjSheet = getSheet(SHEET_NAMES.ADJUSTMENTS || "Adjustments");
+        const adjHdr = buildHeaderMap(adjSheet);
+        const adjRow = findRowById(adjSheet, adjHdr["Id"], payload.adjustmentId);
+        
+        if (!adjRow) return respond(false, null, { code: "NOT_FOUND", message: "Adjustment not found" });
+        if (adjRow.rowValues[adjHdr["Status"]] === "Applied") {
+            return respond(false, null, { code: "ALREADY_APPLIED", message: "Adjustment already applied" });
+        }
+
+        const billSheet = getSheet(SHEET_NAMES.BILLS || "Bills");
+        const billHdr = buildHeaderMap(billSheet);
+        const billRow = findRowById(billSheet, billHdr["Id"], payload.billId);
+        
+        if (!billRow) return respond(false, null, { code: "NOT_FOUND", message: "Bill not found" });
+        if (billRow.rowValues[billHdr["LifecycleState"]] === "Locked") {
+            return respond(false, null, { code: "BILL_LOCKED", message: "Cannot adjust a locked bill" });
+        }
+
+        const currentAmount = Number(billRow.rowValues[billHdr["Amount"]]) || 0;
+        const adjAmount = Number(adjRow.rowValues[adjHdr["Amount"]]) || 0;
+        const newAmount = currentAmount - adjAmount;
+
+        // FIX: Return error if adjustment makes bill negative, instead of silently capping at 0
+        if (newAmount < 0) {
+            return respond(false, null, { 
+                code: "VALIDATION_ERROR", 
+                message: `Adjustment of ${adjAmount} exceeds bill amount of ${currentAmount}` 
+            });
+        }
+
+        billRow.rowValues[billHdr["Amount"]] = newAmount;
+        billRow.rowValues[billHdr["Status"]] = deriveStatus(newAmount, billRow.rowValues[billHdr["AmountPaid"]], billRow.rowValues[billHdr["LifecycleState"]]);
+        billRow.rowValues[billHdr["UpdatedAt"]] = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd'T'HH:mm:ssXXX");
+        
+        billSheet.getRange(billRow.rowIndex, 1, 1, billRow.rowValues.length).setValues([billRow.rowValues]);
+
+        adjRow.rowValues[adjHdr["Status"]] = "Applied";
+        adjRow.rowValues[adjHdr["BillId"]] = payload.billId;
+        adjRow.rowValues[adjHdr["UpdatedAt"]] = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd'T'HH:mm:ssXXX");
+        
+        adjSheet.getRange(adjRow.rowIndex, 1, 1, adjRow.rowValues.length).setValues([adjRow.rowValues]);
+
+        return respond(true, { billId: payload.billId, newAmount });
     });
-
-  return withLock(function () {
-    const custSheet = getSheet("CUSTOMERS");
-    const custHdr = buildHeaderMap(custSheet);
-    const custRow = findRowById(
-      custSheet,
-      custHdr["CustomerId"],
-      payload.customerId,
-    );
-    if (!custRow)
-      return respond(false, null, {
-        code: "NOT_FOUND",
-        message: "Customer not found",
-      });
-
-    const sheet = getSheet("ADJUSTMENTS");
-    const hdr = buildHeaderMap(sheet);
-    const adjId = "ADJ-" + Utilities.getUuid().substring(0, 8).toUpperCase();
-    const now = Utilities.formatDate(
-      new Date(),
-      "Asia/Kolkata",
-      "yyyy-MM-dd'T'HH:mm:ssXXX",
-    );
-
-    const row = [];
-    row[hdr["AdjustmentId"]] = adjId;
-    row[hdr["CustomerId"]] = payload.customerId;
-    row[hdr["Date"]] =
-      payload.date ||
-      Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd");
-    row[hdr["Amount"]] = round2(payload.amount);
-    row[hdr["Reason"]] = sanitizeForText(payload.reason).trim();
-    row[hdr["Applied"]] = false;
-    row[hdr["BillId"]] = "";
-    row[hdr["CreatedAt"]] = now;
-
-    safeAppend(sheet, row);
-    writeActivityLog("addAdjustment", payload, { adjustmentId: adjId });
-
-    return respond(true, { adjustmentId: adjId });
-  });
 }
 
 /**
@@ -760,7 +762,7 @@ function getBills(payload) {
   });
 
   const total = filtered.length;
-  const limit = Math.min(Number(payload.limit) || 50, 200);
+  const limit = Number(payload.limit) || 5000; 
   const offset = Number(payload.offset) || 0;
   const page = filtered.slice(offset, offset + limit);
 
@@ -843,18 +845,26 @@ function getBillText(payload) {
 }
 
 function getAdjustments() {
-  // Hardened: go through SHEET_NAMES instead of literal "Adjustments" so a
-  // future rename of the sheet can't silently break this read action.
-  const sheet = getSheet(SHEET_NAMES.ADJUSTMENTS);
-  const data = sheet.getDataRange().getValues();
-  if (data.length < 2) return { success: true, data: { adjustments: [] } };
-  const headers = data[0];
-  const adjustments = data.slice(1).map((row) => {
-    const obj = {};
-    headers.forEach((h, i) => (obj[h] = row[i]));
-    return obj;
-  });
-  return { success: true, data: { adjustments } };
+  const sheet = getSheet(SHEET_NAMES.ADJUSTMENTS || "Adjustments");
+  const hdr = buildHeaderMap(sheet);
+  const lastRow = sheet.getLastRow();
+  
+  // FIX (AI-1/AI-3): Return respond() instead of a plain JS object to prevent serialization crashes
+  if (lastRow < 2) return respond(true, { adjustments: [] });
+
+  const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  const adjustments = data.map(row => ({
+    adjustmentId: row[hdr["AdjustmentId"]] || row[hdr["Id"]],
+    billId: row[hdr["BillId"]] || "",
+    customerId: row[hdr["CustomerId"]],
+    amount: Number(row[hdr["Amount"]]),
+    reason: row[hdr["Reason"]],
+    status: row[hdr["Status"]],
+    date: row[hdr["Date"]],
+    createdAt: row[hdr["CreatedAt"]],
+  }));
+
+  return respond(true, { adjustments });
 }
 
 // ----------------------------------------------------------------------------
@@ -867,68 +877,44 @@ function getAdjustments() {
  * Locked bills are skipped intentionally (Diagnostic #9: "skips Locked").
  */
 function reconcileBillingLedger(payload) {
-  return withLock(function () {
-    const billSheet = getSheet("BILLS");
-    const billHdr = buildHeaderMap(billSheet);
-    const billLastRow = billSheet.getLastRow();
-    if (billLastRow < 2) return respond(true, { checked: 0, corrected: 0 });
+    return withLock(() => {
+        const billsSheet = getSheet(SHEET_NAMES.BILLS);
+        const billHdr = buildHeaderMap(billsSheet);
+        const billsData = billsSheet.getDataRange().getValues();
 
-    const bills = billSheet
-      .getRange(2, 1, billLastRow - 1, billSheet.getLastColumn())
-      .getValues();
+        const paymentsSheet = getSheet(SHEET_NAMES.PAYMENTS);
+        const payHdr = buildHeaderMap(paymentsSheet);
+        const payData = paymentsSheet.getDataRange().getValues().slice(1);
 
-    const paymentSheet = getSheet("PAYMENTS");
-    const paymentHdr = buildHeaderMap(paymentSheet);
-    const paymentLastRow = paymentSheet.getLastRow();
-    const paymentsByBill = {};
-    if (paymentLastRow >= 2) {
-      const payments = paymentSheet
-        .getRange(2, 1, paymentLastRow - 1, paymentSheet.getLastColumn())
-        .getValues();
-      payments.forEach((p) => {
-        const billId = p[paymentHdr["BillId"]];
-        paymentsByBill[billId] = round2(
-          (paymentsByBill[billId] || 0) + Number(p[paymentHdr["Amount"]]),
-        );
-      });
-    }
+        let reconciled = 0;
 
-    const now = Utilities.formatDate(
-      new Date(),
-      "Asia/Kolkata",
-      "yyyy-MM-dd'T'HH:mm:ssXXX",
-    );
-    let corrected = 0;
+        for (let i = 1; i < billsData.length; i++) {
+            const bill = billsData[i];
+            const billId = bill[billHdr["Id"]];
+            const lifecycleState = bill[billHdr["LifecycleState"]];
+            
+            // Only reconcile unlocked bills
+            if (lifecycleState === "Locked") continue;
 
-    bills.forEach((row, i) => {
-      if (row[billHdr["Locked"]] === true) return;
-      const billId = row[billHdr["BillId"]];
-      const recorded = round2(Number(row[billHdr["AmountPaid"]]));
-      const actual = round2(paymentsByBill[billId] || 0);
+            const actualPaid = payData
+                .filter(p => p[payHdr["BillId"]] === billId)
+                .reduce((sum, p) => sum + (Number(p[payHdr["Amount"]]) || 0), 0);
 
-      if (recorded !== actual) {
-        const rowIndex = i + 2;
-        const amount = Number(row[billHdr["Amount"]]);
-        const cappedActual = Math.min(actual, amount);
-        const newStatus = deriveStatus(amount, cappedActual, "Reconciled");
-        billSheet
-          .getRange(rowIndex, billHdr["AmountPaid"] + 1)
-          .setValue(cappedActual);
-        billSheet.getRange(rowIndex, billHdr["Status"] + 1).setValue(newStatus);
-        billSheet
-          .getRange(rowIndex, billHdr["Version"] + 1)
-          .setValue(Number(row[billHdr["Version"]]) + 1);
-        billSheet.getRange(rowIndex, billHdr["UpdatedAt"] + 1).setValue(now);
-        corrected++;
-      }
+            // FIX: Removed Math.min(actualPaid, amount) to respect legitimate overpayments
+            const newAmountPaid = round2(actualPaid); 
+            
+            if (newAmountPaid !== round2(bill[billHdr["AmountPaid"]])) {
+                bill[billHdr["AmountPaid"]] = newAmountPaid;
+                bill[billHdr["Status"]] = deriveStatus(bill[billHdr["Amount"]], newAmountPaid, lifecycleState);
+                
+                // Update the row in the sheet
+                billsSheet.getRange(i + 1, 1, 1, bill.length).setValues([bill]);
+                reconciled++;
+            }
+        }
+
+        return respond(true, { reconciled });
     });
-
-    writeActivityLog("reconcileBillingLedger", payload, {
-      checked: bills.length,
-      corrected: corrected,
-    });
-    return respond(true, { checked: bills.length, corrected: corrected });
-  });
 }
 
 // NOTE: findRowByTwoColumns() is intentionally NOT defined in this file.

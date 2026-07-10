@@ -1,62 +1,58 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// FILE: eslint.config.js
-// ─────────────────────────────────────────────────────────────────────────────
 import js from "@eslint/js";
-import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
-import { defineConfig, globalIgnores } from "eslint/config";
 
-export default defineConfig([
-  globalIgnores(["dist", ".netlify", ".tmp", ".vite", "coverage"]),
+export default [
+  // FIX (AI-3 Medium 9): `ignores` MUST be in its own object at the top level in flat config.
+  {
+    ignores: ["dist/**", "node_modules/**", "public/sw.js"],
+  },
+  js.configs.recommended,
   {
     files: ["**/*.{js,jsx}"],
-    extends: [
-      js.configs.recommended,
-      reactHooks.configs.flat.recommended,
-      reactRefresh.configs.vite,
-    ],
     languageOptions: {
-      globals: globals.browser,
+      ecmaVersion: "latest",
+      sourceType: "module",
       parserOptions: { ecmaFeatures: { jsx: true } },
+      globals: {
+        document: "readonly",
+        window: "readonly",
+        console: "readonly",
+        localStorage: "readonly",
+        sessionStorage: "readonly",
+        fetch: "readonly",
+        navigator: "readonly",
+        CustomEvent: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+      },
+    },
+    plugins: {
+      "react-hooks": reactHooks,
+      "react-refresh": reactRefresh,
     },
     rules: {
-      // Flag stray console.log but allow warn/error
+      ...reactHooks.configs.recommended.rules,
+      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "no-console": ["warn", { allow: ["warn", "error"] }],
-      
-      // ✅ ADDED: Allow exporting constants/helpers from .jsx files
-      "react-refresh/only-export-components": [
-        "warn",
-        { allowConstantExport: true }
-      ],
+      "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
     },
   },
-
-  //  Cloudflare Pages functions directory
+  // Specific overrides for Cloudflare Functions (if applicable)
   {
     files: ["functions/**/*.js"],
-    extends: [js.configs.recommended],
     languageOptions: {
       globals: {
-        // Cloudflare Pages Functions globals
         Request: "readonly",
         Response: "readonly",
         fetch: "readonly",
-        URL: "readonly",
-        URLSearchParams: "readonly",
         crypto: "readonly",
+        URL: "readonly",
+        env: "readonly",
       },
     },
-
-    ignores: [
-      "dist/**",
-      "node_modules/**",
-      "playwright-report/**",
-      "test-results/**",
-      "coverage/**",
-    ],
     rules: {
       "no-console": ["warn", { allow: ["warn", "error"] }],
     },
   },
-]);
+];

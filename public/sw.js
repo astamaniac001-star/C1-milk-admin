@@ -1,5 +1,5 @@
 /* ============================================================================
- * MILK DELIVERY ADMIN — V19
+ * MILK DELIVERY ADMIN — V21 (Security Patched)
  * FILE 1: sw.js  (Service Worker — place in project root / public/)
  * ============================================================================
  *
@@ -21,11 +21,13 @@
  * and precaches them together with the shell. Without this, an offline
  * revisit loaded /app.js + /app.css but missed the React bundle → blank app.
  *
- * Bump CACHE to milk-v20 whenever shell or strategy changes so activate()
- * evicts the old cache on the next visit.
+ * Security Fix (AI-1): Updated _isApiCall to catch both /api and /functions 
+ * (Cloudflare proxy) to ensure NO authenticated user data is ever cached.
+ *
+ * Bump CACHE to milk-v21 to evict old caches on the next visit.
  * ============================================================================ */
 
-const CACHE = "milk-v20";
+const CACHE = "milk-v21"; // Bumped from v20 to force cache eviction on client devices
 const SHELL = [
   "/",
   "/index.html",
@@ -131,7 +133,9 @@ self.addEventListener("activate", (e) => {
 // ── Fetch: routing strategy ───────────────────────────────────────────────────
 function _isApiCall(url) {
   const path = new URL(url).pathname;
-  return path.startsWith("/api");
+  // SECURITY FIX: Catch both /api and /functions (Cloudflare Pages proxy)
+  // This ensures NO authenticated user data is ever cached, preventing cross-user leakage.
+  return path.startsWith("/api") || path.startsWith("/functions");
 }
 
 async function _fetchAndCache(request) {
@@ -213,7 +217,8 @@ self.addEventListener("fetch", (e) => {
   const strategy = determineFetchStrategy(url);
   const handler = STRATEGY_HANDLERS[strategy];
 
-  // 'pass-through' is not in the map, so handler will be undefined, and we do nothing
+  // 'pass-through' is not in the map, so handler will be undefined, and we do nothing.
+  // The browser handles the request natively (Network-only), which is exactly what we want for APIs.
   if (handler) {
     e.respondWith(handler(e.request));
   }

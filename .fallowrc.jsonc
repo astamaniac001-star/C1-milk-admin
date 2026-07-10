@@ -15,7 +15,7 @@
   "entry": [
     "public/sw.js",
     "functions/api.js",
-    "functions/tests/proxy-test.js"
+    "functions/tests/proxy.test.js"
   ],
 
   "duplicates": {

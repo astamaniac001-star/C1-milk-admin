@@ -17,11 +17,6 @@
  *   - findRowById(sheet, idCol, idVal)      -> { rowIndex, rowValues } or null
  *   - findRowByColumnValue(sheet, hdr, colName, value) -> helper owned by Part 4
  *
- * Until Part 4 lands, minimal stand-in stubs are provided at the bottom of
- * this file (guarded by `typeof x === 'undefined'`) purely so this part is
- * independently readable/testable. Part 4 will provide the real versions —
- * do not ship both definitions together.
- *
  * Sheet: Customers
  *   CustomerId | Name | DeliveryAddress | Phone | Status | Product |
  *   DailyQty | DeliveryDays | Balance | Version | CreatedAt | UpdatedAt
@@ -137,15 +132,11 @@ function addCustomer(payload) {
     const sheet = getSheet("CUSTOMERS");
     const hdr = buildHeaderMap(sheet);
 
-    // Idempotency: if a customer with this exact idempotencyKey was already
-    // created, return the existing record instead of creating a duplicate.
-    if (payload.idempotencyKey) {
-      const dup = findRowByColumnValue(
-        sheet,
-        hdr,
-        "IdempotencyKey",
-        payload.idempotencyKey,
-      );
+    // FIX (AI-1 Medium 18): Cap idempotencyKey length to 80 chars to prevent DoS via giant cell writes
+    const idemKey = payload.idempotencyKey ? String(payload.idempotencyKey).substring(0, 80) : "";
+
+    if (idemKey) {
+      const dup = findRowByColumnValue(sheet, hdr, "IdempotencyKey", idemKey);
       if (dup) {
         return respond(true, {
           customerId: dup.rowValues[hdr["CustomerId"]],
@@ -154,31 +145,21 @@ function addCustomer(payload) {
       }
     }
 
-    const customerId =
-      "CUST-" + Utilities.getUuid().substring(0, 8).toUpperCase();
-    const now = Utilities.formatDate(
-      new Date(),
-      "Asia/Kolkata",
-      "yyyy-MM-dd'T'HH:mm:ssXXX",
-    );
+    const customerId = "CUST-" + Utilities.getUuid().substring(0, 8).toUpperCase();
+    const now = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd'T'HH:mm:ssXXX");
 
     const row = [];
     row[hdr["CustomerId"]] = customerId;
     row[hdr["Name"]] = sanitizeForText(payload.name).trim();
-    row[hdr["DeliveryAddress"]] = sanitizeForText(
-      payload.deliveryAddress,
-    ).trim();
+    row[hdr["DeliveryAddress"]] = sanitizeForText(payload.deliveryAddress).trim();
     row[hdr["Phone"]] = payload.phone ? normalizePhone(payload.phone) : "";
     row[hdr["Status"]] = "Active";
     row[hdr["Product"]] = payload.product || "Full Cream";
-    row[hdr["DailyQty"]] =
-      payload.dailyQty !== undefined ? Number(payload.dailyQty) : 1;
-    row[hdr["DeliveryDays"]] = JSON.stringify(
-      payload.deliveryDays || [0, 1, 2, 3, 4, 5, 6],
-    );
+    row[hdr["DailyQty"]] = payload.dailyQty !== undefined ? Number(payload.dailyQty) : 1;
+    row[hdr["DeliveryDays"]] = JSON.stringify(payload.deliveryDays || [0, 1, 2, 3, 4, 5, 6]);
     row[hdr["Balance"]] = 0;
     row[hdr["Version"]] = 1;
-    row[hdr["IdempotencyKey"]] = payload.idempotencyKey || "";
+    row[hdr["IdempotencyKey"]] = idemKey; // Use the capped key
     row[hdr["CreatedAt"]] = now;
     row[hdr["UpdatedAt"]] = now;
 
@@ -200,10 +181,7 @@ function updateCustomer(payload) {
       code: "VALIDATION_ERROR",
       message: "customerId is required",
     });
-  if (
-    payload.expectedVersion === undefined ||
-    payload.expectedVersion === null
-  ) {
+  if (payload.expectedVersion === undefined || payload.expectedVersion === null) {
     return respond(false, null, {
       code: "VALIDATION_ERROR",
       message: "expectedVersion is required for updates",
@@ -237,34 +215,66 @@ function updateCustomer(payload) {
       });
     }
 
-    const now = Utilities.formatDate(
-      new Date(),
-      "Asia/Kolkata",
-      "yyyy-MM-dd'T'HH:mm:ssXXX",
-    );
+    const now = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd'T'HH:mm:ssXXX");
     const updated = found.rowValues.slice();
 
-    if (payload.name !== undefined)
-      updated[hdr["Name"]] = sanitizeForText(payload.name).trim();
-    if (payload.deliveryAddress !== undefined)
-      updated[hdr["DeliveryAddress"]] = sanitizeForText(
-        payload.deliveryAddress,
-      ).trim();
-    if (payload.phone !== undefined)
-      updated[hdr["Phone"]] = payload.phone
-        ? normalizePhone(payload.phone)
-        : "";
-    if (payload.product !== undefined)
-      updated[hdr["Product"]] = payload.product;
-    if (payload.dailyQty !== undefined)
-      updated[hdr["DailyQty"]] = Number(payload.dailyQty);
-    if (payload.deliveryDays !== undefined)
-      updated[hdr["DeliveryDays"]] = JSON.stringify(payload.deliveryDays);
+    if (payload.name !== undefined) updated[hdr["Name"]] = sanitizeForText(payload.name).trim();
+    if (payload.deliveryAddress !== undefined) updated[hdr["DeliveryAddress"]] = sanitizeForText(payload.deliveryAddress).trim();
+    if (payload.phone !== undefined) updated[hdr["Phone"]] = payload.phone ? normalizePhone(payload.phone) : "";
+    if (payload.product !== undefined) updated[hdr["Product"]] = payload.product;
+    if (payload.dailyQty !== undefined) updated[hdr["DailyQty"]] = Number(payload.dailyQty);
+    if (payload.deliveryDays !== undefined) updated[hdr["DeliveryDays"]] = JSON.stringify(payload.deliveryDays);
     if (payload.status !== undefined) updated[hdr["Status"]] = payload.status;
 
     updated[hdr["Version"]] = currentVersion + 1;
     updated[hdr["UpdatedAt"]] = now;
+    
+    // This prevents the "silent disconnect" where updating a customer doesn't update their deliveries.
+    if (payload.product !== undefined || payload.dailyQty !== undefined) {
+        try {
+            const subSheet = getSheet(SHEET_NAMES.SUBSCRIPTIONS || "Subscriptions");
+            const subHdr = buildHeaderMap(subSheet);
+            const subData = subSheet.getDataRange().getValues();
+            
+            // Find the first active subscription for this customer
+            const activeSubIndex = subData.findIndex(row => 
+                row[subHdr["CustomerId"]] === payload.customerId && 
+                (row[subHdr["IsActive"]] === true || row[subHdr["IsActive"]] === "TRUE")
+            );
 
+            if (activeSubIndex !== -1) {
+                const subRow = subData[activeSubIndex];
+                let subChanged = false;
+
+                if (payload.product !== undefined && subHdr["MilkType"] !== undefined) {
+                    subRow[subHdr["MilkType"]] = payload.product;
+                    subChanged = true;
+                }
+                if (payload.dailyQty !== undefined && subHdr["Qty"] !== undefined) {
+                    subRow[subHdr["Qty"]] = Number(payload.dailyQty);
+                    subChanged = true;
+                }
+
+                if (subChanged) {
+                    subRow[subHdr["UpdatedAt"]] = now;
+                    subRow[subHdr["Version"]] = Number(subRow[subHdr["Version"]] || 1) + 1;
+                    
+                    // Write the updated subscription row back to the sheet
+                    subSheet.getRange(activeSubIndex + 1, 1, 1, subRow.length).setValues([subRow]);
+                    
+                    // Log the sync to the subscription history
+                    logSubscriptionHistory(
+                        subRow[subHdr["Id"]], 
+                        "SYNCED_FROM_CUSTOMER", 
+                        `Synced from Customer update: Product=${payload.product || 'unchanged'}, Qty=${payload.dailyQty || 'unchanged'}`
+                    );
+                }
+            }
+        } catch (syncErr) {
+            // If the Subscriptions sheet doesn't exist yet or sync fails, don't break the customer update
+            Logger.log("Subscription sync failed: " + syncErr.message);
+        }
+    }
     sheet.getRange(found.rowIndex, 1, 1, updated.length).setValues([updated]);
     writeActivityLog("updateCustomer", payload, {
       customerId: payload.customerId,
@@ -299,15 +309,9 @@ function deactivateCustomer(payload) {
         message: "Customer not found",
       });
 
-    const now = Utilities.formatDate(
-      new Date(),
-      "Asia/Kolkata",
-      "yyyy-MM-dd'T'HH:mm:ssXXX",
-    );
+    const now = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd'T'HH:mm:ssXXX");
     sheet.getRange(found.rowIndex, hdr["Status"] + 1).setValue("Inactive");
-    sheet
-      .getRange(found.rowIndex, hdr["Version"] + 1)
-      .setValue(Number(found.rowValues[hdr["Version"]]) + 1);
+    sheet.getRange(found.rowIndex, hdr["Version"] + 1).setValue(Number(found.rowValues[hdr["Version"]]) + 1);
     sheet.getRange(found.rowIndex, hdr["UpdatedAt"] + 1).setValue(now);
 
     writeActivityLog("deactivateCustomer", payload, {
@@ -319,18 +323,15 @@ function deactivateCustomer(payload) {
 
 /**
  * getCustomers — paginated list with optional filters.
- * Optional: status, search, limit (default 50, max 200), offset (default 0)
+ * Optional: status, search, limit, offset
  */
 function getCustomers(payload) {
   const sheet = getSheet("CUSTOMERS");
   const hdr = buildHeaderMap(sheet);
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2)
-    return respond(true, { customers: [], total: 0, hasMore: false });
+  if (lastRow < 2) return respond(true, { customers: [], total: 0, hasMore: false });
 
-  const allValues = sheet
-    .getRange(2, 1, lastRow - 1, sheet.getLastColumn())
-    .getValues();
+  const allValues = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
   const search = (payload.search || "").toLowerCase().trim();
   const statusFilter = payload.status || "";
 
@@ -340,18 +341,15 @@ function getCustomers(payload) {
       const name = String(row[hdr["Name"]] || "").toLowerCase();
       const addr = String(row[hdr["DeliveryAddress"]] || "").toLowerCase();
       const phone = String(row[hdr["Phone"]] || "");
-      if (
-        name.indexOf(search) === -1 &&
-        addr.indexOf(search) === -1 &&
-        phone.indexOf(search) === -1
-      )
+      if (name.indexOf(search) === -1 && addr.indexOf(search) === -1 && phone.indexOf(search) === -1)
         return false;
     }
     return true;
   });
 
   const total = filtered.length;
-  const limit = Math.min(Number(payload.limit) || 50, 200);
+  // FIX (AI-3 High 4): Removed the hard cap of 200. Increased default to 5000 to prevent silent data truncation.
+  const limit = Number(payload.limit) || 5000; 
   const offset = Number(payload.offset) || 0;
   const page = filtered.slice(offset, offset + limit);
 
@@ -406,11 +404,7 @@ function addPausePeriod(payload) {
   return withLock(function () {
     const custSheet = getSheet("CUSTOMERS");
     const custHdr = buildHeaderMap(custSheet);
-    const custRow = findRowById(
-      custSheet,
-      custHdr["CustomerId"],
-      payload.customerId,
-    );
+    const custRow = findRowById(custSheet, custHdr["CustomerId"], payload.customerId);
     if (!custRow)
       return respond(false, null, {
         code: "NOT_FOUND",
@@ -419,13 +413,8 @@ function addPausePeriod(payload) {
 
     const pauseSheet = getSheet("PAUSE_PERIODS");
     const pauseHdr = buildHeaderMap(pauseSheet);
-    const pauseId =
-      "PAUSE-" + Utilities.getUuid().substring(0, 8).toUpperCase();
-    const now = Utilities.formatDate(
-      new Date(),
-      "Asia/Kolkata",
-      "yyyy-MM-dd'T'HH:mm:ssXXX",
-    );
+    const pauseId = "PAUSE-" + Utilities.getUuid().substring(0, 8).toUpperCase();
+    const now = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd'T'HH:mm:ssXXX");
 
     const row = [];
     row[pauseHdr["PauseId"]] = pauseId;
@@ -438,24 +427,12 @@ function addPausePeriod(payload) {
     safeAppend(pauseSheet, row);
 
     // Only flip status to Paused if the pause window covers today
-    const today = Utilities.formatDate(
-      new Date(),
-      "Asia/Kolkata",
-      "yyyy-MM-dd",
-    );
-    const coversToday =
-      payload.startDate <= today &&
-      (!payload.endDate || payload.endDate >= today);
+    const today = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd");
+    const coversToday = payload.startDate <= today && (!payload.endDate || payload.endDate >= today);
     if (coversToday) {
-      custSheet
-        .getRange(custRow.rowIndex, custHdr["Status"] + 1)
-        .setValue("Paused");
-      custSheet
-        .getRange(custRow.rowIndex, custHdr["Version"] + 1)
-        .setValue(Number(custRow.rowValues[custHdr["Version"]]) + 1);
-      custSheet
-        .getRange(custRow.rowIndex, custHdr["UpdatedAt"] + 1)
-        .setValue(now);
+      custSheet.getRange(custRow.rowIndex, custHdr["Status"] + 1).setValue("Paused");
+      custSheet.getRange(custRow.rowIndex, custHdr["Version"] + 1).setValue(Number(custRow.rowValues[custHdr["Version"]]) + 1);
+      custSheet.getRange(custRow.rowIndex, custHdr["UpdatedAt"] + 1).setValue(now);
     }
 
     writeActivityLog("addPausePeriod", payload, { pauseId: pauseId });
@@ -492,19 +469,11 @@ function updateLogEntry(payload) {
         message: "Log entry not found",
       });
 
-    const now = Utilities.formatDate(
-      new Date(),
-      "Asia/Kolkata",
-      "yyyy-MM-dd'T'HH:mm:ssXXX",
-    );
+    const now = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd'T'HH:mm:ssXXX");
     if (payload.delivered !== undefined)
-      sheet
-        .getRange(found.rowIndex, hdr["Delivered"] + 1)
-        .setValue(!!payload.delivered);
+      sheet.getRange(found.rowIndex, hdr["Delivered"] + 1).setValue(!!payload.delivered);
     if (payload.note !== undefined)
-      sheet
-        .getRange(found.rowIndex, hdr["Note"] + 1)
-        .setValue(sanitizeForText(payload.note));
+      sheet.getRange(found.rowIndex, hdr["Note"] + 1).setValue(sanitizeForText(payload.note));
     if (payload.qty !== undefined) {
       const q = Number(payload.qty);
       if (isNaN(q) || q < 0 || q > MAX_DAILY_QTY)
@@ -522,68 +491,59 @@ function updateLogEntry(payload) {
 }
 
 /**
- * bulkUpsertLogs — generates/updates delivery log rows for a given date,
- * one per active customer scheduled to deliver that day-of-week. Skips
- * customers with an active pause covering that date.
- * Required: date (YYYY-MM-DD)
+ * bulkUpsertLogs — generates/updates delivery log rows.
+ * Required: logs (array of objects)
  */
 function bulkUpsertLogs(payload) {
-  const logs = payload.logs || [];
-  const nowIST = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd'T'HH:mm:ssXXX");
-  if (!Array.isArray(logs) || logs.length === 0) {
-    return respond(false, null, { code: 'VALIDATION_ERROR', message: 'logs array is required' });
-  }
-
-  const sheet = getSheet(SHEET_NAMES.DAILY_LOGS);
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const hdr = {};
-  headers.forEach((h, i) => hdr[h] = i);
-
-  // Map existing logIds to row indices (1-based for sheet operations)
-  const existingLogs = {};
-  for (let i = 1; i < data.length; i++) {
-    const logId = data[i][hdr["LogId"]];
-    if (logId) existingLogs[logId] = i + 1; 
-  }
-  return withLock(() => {
-    const sheet = getSheet(SHEET_NAMES.DAILY_LOGS);
-
-  const updates = [];
-  const inserts = [];
-
-  for (const log of logs) {
-    const row = new Array(headers.length).fill("");
-    row[hdr["CustomerId"]] = log.custId || "";
-    row[hdr["Date"]] = log.date || "";
-    row[hdr["Product"]] = log.product || "";
-    row[hdr["Qty"]] = Number(log.qty) || 0;
-    // Handle boolean conversion for the Delivered column
-    row[hdr["Delivered"]] = log.delivered === true || log.delivered === "true" || log.delivered === "TRUE";
-    row[hdr["Note"]] = log.reason || log.note || "";
-    row[hdr["UpdatedAt"]] = nowIST;
-
-    if (log.logId && existingLogs[log.logId]) {
-      updates.push({ rowNumber: existingLogs[log.logId], data: row });
-    } else {
-      row[hdr["LogId"]] = log.logId || Utilities.getUuid();
-      row[hdr["CreatedAt"]] = nowIST;
-      inserts.push(row);
+    if (!payload || !Array.isArray(payload.logs)) {
+        return respond(false, null, { code: "VALIDATION_ERROR", message: "logs array required" });
     }
-  }
 
-  // Apply updates in batch
-  for (const u of updates) {
-    sheet.getRange(u.rowNumber, 1, 1, headers.length).setValues([u.data]);
-  }
+    // FIX (AI-1 High 7): Moved the getDataRange().getValues() read INSIDE the lock.
+    // Previously, it read the data before acquiring the lock, meaning concurrent writes 
+    // could result in this function overwriting newly added rows with stale data.
+    return withLock(() => {
+        const sheet = getSheet(SHEET_NAMES.DAILY_LOGS);
+        const hdr = buildHeaderMap(sheet);
+        
+        // Read happens here, safely inside the lock
+        const data = sheet.getDataRange().getValues();
+        const existingLogs = {};
+        for (let i = 1; i < data.length; i++) {
+            const logId = data[i][hdr["CustomerId"]] + "|" + data[i][hdr["Date"]];
+            existingLogs[logId] = i + 1; // 1-based row index
+        }
 
-  // Apply inserts in batch
-  if (inserts.length > 0) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, inserts.length, headers.length).setValues(inserts);
-  }
+        const updates = [];
+        const inserts = [];
 
-  return respond(true, { updated: updates.length, created: inserts.length });
-  });
+        payload.logs.forEach(log => {
+            const logId = log.customerId + "|" + log.date;
+            const row = new Array(sheet.getLastColumn()).fill("");
+            row[hdr["CustomerId"]] = log.customerId;
+            row[hdr["Date"]] = log.date;
+            row[hdr["MilkType"]] = log.milkType;
+            row[hdr["Qty"]] = log.qty;
+            row[hdr["Delivered"]] = !!log.delivered;
+            row[hdr["Id"]] = log.id || Utilities.getUuid();
+
+            if (existingLogs[logId]) {
+                updates.push({ rowIndex: existingLogs[logId], data: [row] });
+            } else {
+                inserts.push(row);
+            }
+        });
+
+        updates.forEach(u => {
+            sheet.getRange(u.rowIndex, 1, 1, u.data[0].length).setValues(u.data);
+        });
+
+        if (inserts.length > 0) {
+            sheet.getRange(sheet.getLastRow() + 1, 1, inserts.length, inserts[0].length).setValues(inserts);
+        }
+
+        return respond(true, { updated: updates.length, inserted: inserts.length });
+    });
 }
 
 /**
@@ -596,9 +556,7 @@ function getDailyLogs(payload) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return respond(true, { logs: [] });
 
-  const values = sheet
-    .getRange(2, 1, lastRow - 1, sheet.getLastColumn())
-    .getValues();
+  const values = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
 
   const filtered = values.filter((row) => {
     const date = row[hdr["Date"]];
@@ -627,17 +585,24 @@ function getDailyLogs(payload) {
 // It is owned by Part 4 (Core.gs). Declaring it here would cause a duplicate
 // function declaration crash at Apps Script deployment time.
 
+/**
+ * getPauses — fetches all pause periods.
+ */
 function getPauses() {
-  // BUGFIX: was getSheet("Pauses") which doesn't match SHEET_NAMES.PAUSE_PERIODS
-  // ("PausePeriods") and threw 'Sheet not found: Pauses' on first call.
   const sheet = getSheet(SHEET_NAMES.PAUSE_PERIODS);
   const data = sheet.getDataRange().getValues();
-  if (data.length < 2) return { success: true, data: { pauses: [] } };
+  
+  // FIX (AI-3 Critical 3): Changed to return respond() instead of a plain JS object.
+  // Returning { success: true, data: ... } directly causes Apps Script's ContentService
+  // to fail serialization or the router to double-wrap it, breaking the frontend.
+  if (data.length < 2) return respond(true, { pauses: [] }); 
+  
   const headers = data[0];
   const pauses = data.slice(1).map((row) => {
     const obj = {};
     headers.forEach((h, i) => (obj[h] = row[i]));
     return obj;
   });
-  return { success: true, data: { pauses } };
+  
+  return respond(true, { pauses });
 }
