@@ -1,5 +1,6 @@
 // src/lib/api.js
 
+// --- 🔥 BULLETPROOF DATA HELPERS ---
 const toNum = (val) => {
   if (val === null || val === undefined || val === "") return 0;
   const n = Number(val);
@@ -13,7 +14,6 @@ const toArray = (val) => {
       const parsed = JSON.parse(val);
       return Array.isArray(parsed) ? parsed : [];
     } catch (e) {
-      
       if (val.includes(',')) {
         return val.split(',').map(s => s.trim()).filter(Boolean);
       }
