@@ -409,12 +409,11 @@ function verifyPIN(payload) {
   return withLock(function () {
     const ipHash = payload.ipHash || "unknown";
     
-    // FIXED: Only CHECK the limit here, do not increment yet
     const rateLimit = checkPinRateLimit(ipHash);
     if (!rateLimit.allowed) {
       return respond(false, null, { code: "RATE_LIMITED", message: "Too many failed PIN attempts today." });
     }
-    //  FIX START: Read the PIN from the Script Properties
+
     const sheet = getSheet("SETTINGS");
     const hdr = buildHeaderMap(sheet);
     
@@ -430,26 +429,42 @@ function verifyPIN(payload) {
 
     const candidateHash = hashPIN(pin, salt);
     if (!constantTimeEqual(candidateHash, storedHash)) {
-      // FIXED: ONLY increment the rate limit counter on FAILED attempts
       incrementPinRateLimit(ipHash);
       return respond(false, null, { code: "INVALID_PIN", message: "Incorrect PIN" });
     }
 
-    // Success path
     const token = Utilities.getUuid();
     
-    // We still use Script Properties for temporary sessions, which is perfectly fine!
-    const props = PropertiesService.getScriptProperties();
-    props.setProperty("SESSION_" + token, JSON.stringify({ ip: ipHash, created: nowISTTimestamp() }));
+    // 1. Generate the EXACT sessionSecret that validateSession expects
+    const appSecret = PropertiesService.getScriptProperties().getProperty("APP_SECRET") || "";
+    const sessionSecret = appSecret ? sha256Hex(token + appSecret) : token;
+
+    // 2. Calculate expiration (12 hours)
+    const expiresAt = Date.now() + SESSION_TTL_MS;
+    const sessionData = { ip: ipHash, created: nowISTTimestamp(), expiresAt };
+
+    // 3. Save to SYSTEM_STATE sheet
+    const stateSheet = getSheet("SYSTEM_STATE");
+    const stateHdr = buildHeaderMap(stateSheet);
     
+    // CRITICAL: Ensure the sheet has the correct headers!
+    if (stateHdr["Key"] === undefined || stateHdr["Value"] === undefined) {
+      stateSheet.getRange(1, 1, 1, 2).setValues([["Key", "Value"]]);
+      stateHdr["Key"] = 0;
+      stateHdr["Value"] = 1;
+    }
+
+    const row = [];
+    row[stateHdr["Key"]] = "Session_" + token;
+    row[stateHdr["Value"]] = JSON.stringify(sessionData);
+    safeAppend(stateSheet, row);
+
     writeActivityLog("verifyPIN", "Successful login from " + ipHash);
     
-    // Return both token and sessionSecret so the frontend state updates correctly
-    return respond(true, { token: token, sessionSecret: token }); 
+    return respond(true, { token: token, sessionSecret: sessionSecret }); 
   });
 }
 
-// --- ADD/REPLACE these helpers ---
 function checkPinRateLimit(ipHash) {
   const props = PropertiesService.getScriptProperties();
   const key = "PIN_RATE_" + ipHash + "_" + todayIST();
@@ -830,20 +845,20 @@ function doPost(e) {
                 message: "No handler wired for: " + action,
             });
     }
-  } catch (err) {
-    Logger.log(
-      '[doPost] Unhandled exception in action "' +
-        action +
-        '": ' +
-        err.message +
-        "\n" +
-        (err.stack || ""),
-    );
-    return respond(false, null, {
-      code: "SYSTEM_ERROR",
-      message: "Internal error processing " + action,
-    });
-  }
+     } catch (err) {
+       Logger.log(
+         '[doPost] Unhandled exception in action "' +
+           action +
+           '": ' +
+           err.message +
+           "\n" +
+           (err.stack || ""),
+       );
+       return respond(false, null, {
+         code: "SYSTEM_ERROR",
+         message: err.message, 
+       });
+     }
 }
 
 function doGet(e) {

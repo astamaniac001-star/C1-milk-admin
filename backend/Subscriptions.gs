@@ -48,20 +48,37 @@ function getSubscriptions(payload) {
     if (custLastRow >= 2) {
         const custValues = custSheet.getRange(2, 1, custLastRow - 1, custSheet.getLastColumn()).getValues();
         custValues.forEach((row) => {
-            customers[row[custHdr["CustomerId"]]] = row[custHdr["Name"]];
+            // FIX: Ensure headers exist before accessing to prevent crashes
+            if (custHdr["CustomerId"] !== undefined && custHdr["Name"] !== undefined) {
+                customers[row[custHdr["CustomerId"]]] = row[custHdr["Name"]];
+            }
         });
     }
 
-    const subscriptions = allValues.map((row) => ({
-        id: row[hdr["Id"]],
-        customerId: row[hdr["CustomerId"]],
-        customerName: customers[row[hdr["CustomerId"]]] || "Unknown",
-        milkType: row[hdr["MilkType"]],
-        quantity: Number(row[hdr["Qty"]]),
-        deliveryDays: JSON.parse(row[hdr["DeliveryDays"]] || "[]"),
-        isActive: row[hdr["IsActive"]] === true || row[hdr["IsActive"]] === "TRUE",
-        version: Number(row[hdr["Version"]] || 1),
-    }));
+    const subscriptions = allValues.map((row) => {
+        let days = [];
+        try {
+            const rawDays = row[hdr["DeliveryDays"]];
+            if (typeof rawDays === 'string' && rawDays.trim() !== "") {
+                days = JSON.parse(rawDays);
+            } else if (Array.isArray(rawDays)) {
+                days = rawDays;
+            }
+        } catch (e) {
+            days = [];
+        }
+
+        return {
+            id: row[hdr["Id"]],
+            customerId: row[hdr["CustomerId"]],
+            customerName: customers[row[hdr["CustomerId"]]] || "Unknown",
+            milkType: row[hdr["MilkType"]],
+            quantity: Number(row[hdr["Qty"]] || 0),
+            deliveryDays: days,
+            isActive: row[hdr["IsActive"]] === true || row[hdr["IsActive"]] === "TRUE",
+            version: Number(row[hdr["Version"]] || 1),
+        };
+    });
 
     return respond(true, { subscriptions });
 }

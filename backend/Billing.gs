@@ -820,7 +820,9 @@ function getBillText(payload) {
 
 function getAdjustments(payload) {
   const sheet = getSheet(SHEET_NAMES.ADJUSTMENTS);
-  const hdr = getHeaders(SHEET_NAMES.ADJUSTMENTS);
+ 
+  const hdr = buildHeaderMap(sheet); 
+  
   const data = sheet.getDataRange().getValues();
   
   const adjustments = [];
@@ -832,13 +834,14 @@ function getAdjustments(payload) {
       customerId: row[hdr["CustomerId"]],
       amount: Number(row[hdr["Amount"]] || 0),
       reason: row[hdr["Reason"]],
-      applied: row[hdr["Applied"]] === true || row[hdr["Applied"]] === "TRUE", // FIXED: was reading non-existent "Status"
+      applied: row[hdr["Applied"]] === true || row[hdr["Applied"]] === "TRUE",
       date: row[hdr["Date"]],
       createdAt: row[hdr["CreatedAt"]]
     });
   }
   return respond(true, { adjustments });
 }
+
 // ----------------------------------------------------------------------------
 // RECONCILIATION
 // ----------------------------------------------------------------------------

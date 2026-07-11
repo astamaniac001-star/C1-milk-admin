@@ -14,7 +14,6 @@ import {
 import { getToday } from "../lib/utils.js";
 
 export function useEntityStore(token) {
-  // Removed unused _token parameter
   const [customers, setCustomers] = useState([]);
   const [imports, setImports] = useState([]);
   const [bills, setBills] = useState([]);
@@ -26,6 +25,7 @@ export function useEntityStore(token) {
   const [loadErrors, setLoadErrors] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [creditNotes, setCreditNotes] = useState([]);
+  
   const refresh = useCallback(() => {
     setLoadErrors([]);
     setRefreshKey((k) => k + 1);
@@ -34,7 +34,8 @@ export function useEntityStore(token) {
   const safeFetch = useCallback(async (action, payload, fallbackKey) => {
     try {
       const res = await callApi(action, payload);
-      return res[fallbackKey] || [];
+      // 🔥 FIX: Safely access the key to prevent crashes if res is null
+      return (res && res[fallbackKey]) || [];
     } catch (err) {
       console.warn(`[useEntityStore] ${action} failed:`, err.message);
       setLoadErrors((prev) =>
@@ -70,37 +71,28 @@ export function useEntityStore(token) {
       if (cns !== null) setCreditNotes(cns.map(mapCreditNoteFromApi));
     };
     fetchData();
-  }, [token,safeFetch, refreshKey]);
+  }, [token, safeFetch, refreshKey]);
 
   const fetchLogs = useCallback(async (date) => {
     try {
       const res = await callApi("getDailyLogs", { date });
-      setLogs((res.logs || []).map(mapLogFromApi));
+      setLogs((res && res.logs ? res.logs : []).map(mapLogFromApi));
     } catch (err) {
       console.error("Failed to fetch logs for date:", date, err);
     }
   }, []);
 
   return {
-    customers,
-    setCustomers,
-    imports,
-    setImports,
-    bills,
-    setBills,
-    logs,
-    setLogs,
-    adjustments,
-    setAdjustments,
-    pauses,
-    setPauses,
-    brands,
-    setBrands,
-    subscriptions,
-    setSubscriptions,
+    customers, setCustomers,
+    imports, setImports,
+    bills, setBills,
+    logs, setLogs,
+    adjustments, setAdjustments,
+    pauses, setPauses,
+    brands, setBrands,
+    subscriptions, setSubscriptions,
     fetchLogs,
-    creditNotes,
-    setCreditNotes,
+    creditNotes, setCreditNotes,
     loadErrors,
     refresh,
   };
@@ -109,24 +101,15 @@ export function useEntityStore(token) {
 export function useFilterState() {
   const [custSearch, setCustSearch] = useState("");
   const [custFilter, setCustFilter] = useState("All");
-  const [impFilter, setImpFilter] = useState({
-    month: "",
-    brand: "",
-    status: "",
-  });
+  const [impFilter, setImpFilter] = useState({ month: "", brand: "", status: "" });
   const [billFilter, setBillFilter] = useState("All");
   const [diagRan, setDiagRan] = useState(false);
 
   return {
-    custSearch,
-    setCustSearch,
-    custFilter,
-    setCustFilter,
-    impFilter,
-    setImpFilter,
-    billFilter,
-    setBillFilter,
-    diagRan,
-    setDiagRan,
+    custSearch, setCustSearch,
+    custFilter, setCustFilter,
+    impFilter, setImpFilter,
+    billFilter, setBillFilter,
+    diagRan, setDiagRan,
   };
 }

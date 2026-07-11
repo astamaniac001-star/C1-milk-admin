@@ -9,13 +9,13 @@ function renderDashboard(state, handlers) {
   return (
     <Dashboard
       today={state.today}
-      activeC={state.activeC}
-      totalRevenue={state.totalRevenue}
-      pendingDues={state.pendingDues}
-      confirmedStock={state.confirmedStock}
-      todayLogs={state.todayLogs}
-      bills={state.bills}
-      customers={state.customers}
+      activeC={state.activeC || []}
+      totalRevenue={state.totalRevenue || 0}
+      pendingDues={state.pendingDues || 0}
+      confirmedStock={state.confirmedStock || 0}
+      todayLogs={state.todayLogs || []}
+      bills={state.bills || []}
+      customers={state.customers || []}
       onSetTab={state.setTab}
       onOpenModal={state.openModal}
       onGenerateBill={handlers.generateMonthlyBills}
@@ -26,16 +26,16 @@ function renderDashboard(state, handlers) {
 function renderCustomers(state, handlers) {
   return (
     <Customers
-      filtered={state.filteredC}
-      total={state.filteredC.length}
-      bills={state.bills}
-      search={state.custSearch}
+      filtered={state.filteredC || []}
+      total={(state.filteredC || []).length}
+      bills={state.bills || []}
+      search={state.custSearch || ""}
       onSearchChange={state.setCustSearch}
-      filter={state.custFilter}
+      filter={state.custFilter || "All"}
       onFilterChange={state.setCustFilter}
       onOpenModal={state.openModal}
       onWhatsapp={handlers.whatsapp}
-      onDeactivate={handlers.updateCustomer} // Deactivating is just an update to status: 'Inactive'
+      onDeactivate={handlers.updateCustomer} 
     />
   );
 }
@@ -45,12 +45,12 @@ function renderDelivery(state, handlers) {
     <Delivery
       logDate={state.logDate}
       onLogDateChange={state.setLogDate}
-      todayLogs={state.todayLogs}
+      todayLogs={state.todayLogs || []}
       onToggleLog={handlers.toggleDeliveryLog}
       fetchLogs={state.fetchLogs}
       generateDailyLogs={handlers.generateDailyLogs}
       onOpenModal={state.openModal}
-      customers={state.customers}
+      customers={state.customers || []}
     />
   );
 }
@@ -58,9 +58,9 @@ function renderDelivery(state, handlers) {
 function renderImports(state, handlers) {
   return (
     <Imports
-      filtered={state.filteredImports}
-      brands={state.brands}
-      impFilter={state.impFilter}
+      filtered={state.filteredImports || []} // 🔥 Updated to filteredImports
+      brands={state.brands || []}
+      impFilter={state.impFilter || {}}
       onImpFilterChange={state.setImpFilter}
       onOpenModal={state.openModal}
       onConfirm={handlers.confirmMilkImport}
@@ -72,19 +72,18 @@ function renderImports(state, handlers) {
 function renderBilling(state, handlers) {
   return (
     <Billing
-      bills={state.bills}
-      filtered={state.filteredB}
-      billFilter={state.billFilter}
+      bills={state.bills || []}
+      filtered={state.filteredB || []}
+      billFilter={state.billFilter || "All"}
       billMonth={state.billMonth}
-      pendingDues={state.pendingDues}
-      customers={state.customers}
+      pendingDues={state.pendingDues || 0}
+      customers={state.customers || []}
       onBillFilterChange={state.setBillFilter}
       onBillMonthChange={state.setBillMonth}
       onOpenModal={state.openModal}
       onLock={handlers.lockBill}
       onUnlock={handlers.unlockBill}
       onWhatsapp={handlers.whatsapp}
-      onOpenModal={state.openModal}
       onGenerateBill={() =>
         handlers.generateMonthlyBills(
           state.billMonth || state.today.substring(0, 7),
@@ -97,13 +96,13 @@ function renderBilling(state, handlers) {
 function renderMore(state, handlers) {
   return (
     <More
-      adjustments={state.adjustments}
-      pauses={state.pauses}
-      brands={state.brands}
-      customers={state.customers}
-      bills={state.bills}
+      adjustments={state.adjustments || []}
+      pauses={state.pauses || []}
+      brands={state.brands || []}
+      customers={state.customers || []}
+      bills={state.bills || []}
       diagRan={state.diagRan}
-      activeBrandsCount={state.activeBrandsCount}
+      activeBrandsCount={state.activeBrandsCount || 0}
       onOpenModal={state.openModal}
       onApplyAdj={(adjId, billId) => handlers.applyAdjustment(adjId, billId)}
       onRunDiag={() => {
