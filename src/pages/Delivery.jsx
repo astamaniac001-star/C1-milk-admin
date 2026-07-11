@@ -1,16 +1,17 @@
 // ── Delivery.jsx ──────────────────────────────────────────────────────────────
-import { useEffect } from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useBusy } from "../hooks/useBusy.js";
 import { Card, Field, IS, StatGrid, Empty, Btn } from "../components/ui.jsx";
 
+// 🔥 FIX: Bulletproof stats calculation
 function calculateDeliveryStats(todayLogs) {
-  const delivered = todayLogs.filter((l) => l.delivered);
+  const logs = Array.isArray(todayLogs) ? todayLogs : [];
+  const delivered = logs.filter((l) => l.delivered);
   return {
-    scheduled: todayLogs.length,
+    scheduled: logs.length,
     deliveredCount: delivered.length,
-    skippedCount: todayLogs.filter((l) => !l.delivered).length,
-    totalLiters: delivered.reduce((s, l) => s + l.qty, 0).toFixed(1) + " L",
+    skippedCount: logs.filter((l) => !l.delivered).length,
+    totalLiters: delivered.reduce((s, l) => s + Number(l.qty || 0), 0).toFixed(1) + " L",
   };
 }
 
@@ -31,7 +32,6 @@ function getToggleButtonText(delivered) {
   return delivered ? "✓ Done" : "✗ Skip";
 }
 
-// ── Extracted List Item Component ────────────────────────────────────────────
 function DeliveryLogItem({ id, name, product, qty, delivered, onToggle }) {
   return (
     <div className="flex justify-between items-center p-3 border-b last:border-b-0">
@@ -51,15 +51,13 @@ function DeliveryLogItem({ id, name, product, qty, delivered, onToggle }) {
   );
 }
 
-// ✅ Extracted to module level to reduce the arrow function's complexity to 1
-// fallow-ignore-next-line complexity
 function resolveLog(l, customerMap) {
   const c = customerMap[l.custId];
   return {
     id: l.id,
     name: c?.name ?? "Unknown Customer",
     product: l.product ?? c?.product ?? "Milk",
-    qty: l.qty,
+    qty: Number(l.qty || 0), // 🔥 FIX: Force to Number
     delivered: Boolean(l.delivered),
   };
 }
@@ -67,28 +65,30 @@ function resolveLog(l, customerMap) {
 export default function Delivery({
   logDate,
   onLogDateChange,
-  todayLogs,
+  todayLogs = [], // 🔥 FIX: Default to empty array
   onToggleLog,
   fetchLogs,
   generateDailyLogs,
   onOpenModal,
   customers = [],
 }) {
+  // 🔥 FIX: Ensure todayLogs is always an array before mapping
+  const safeLogs = Array.isArray(todayLogs) ? todayLogs : [];
+
   const customerMap = useMemo(() => {
     const map = {};
-    customers.forEach((c) => {
+    (customers || []).forEach((c) => {
       map[c.id] = c;
     });
     return map;
   }, [customers]);
 
-  // ✅ The arrow function now has a cyclomatic complexity of 1, dropping CRAP to near 0
   const resolvedLogs = useMemo(
-    () => todayLogs.map((l) => resolveLog(l, customerMap)),
-    [todayLogs, customerMap],
+    () => safeLogs.map((l) => resolveLog(l, customerMap)),
+    [safeLogs, customerMap],
   );
 
-  const stats = calculateDeliveryStats(todayLogs);
+  const stats = calculateDeliveryStats(safeLogs);
 
   useEffect(() => {
     if (logDate && fetchLogs) {
@@ -135,7 +135,7 @@ export default function Delivery({
 
       <StatGrid stats={stats} />
 
-      {todayLogs.length === 0 ? (
+      {safeLogs.length === 0 ? (
         <Empty message="No deliveries scheduled for this date." />
       ) : (
         <Card>

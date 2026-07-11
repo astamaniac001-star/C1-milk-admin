@@ -1,7 +1,4 @@
 // ── Imports.jsx ───────────────────────────────────────────────────────────────
-// Milk Imports tab: filter (month/brand/status) + KPI tiles + import cards +
-// brand list.
-
 import { fmt } from "../lib/utils.js";
 import {
   Card,
@@ -17,20 +14,25 @@ import {
 const STATUS_FILTERS = ["Draft", "Confirmed", "Reconciled"];
 
 export default function Imports({
-  filtered,
-  brands,
+  filtered = [], // 🔥 FIX: Default to empty array
+  brands = [],   // 🔥 FIX: Default to empty array
   impFilter,
   onImpFilterChange,
   onOpenModal,
   onConfirm,
   onDelete,
 }) {
-  const totalQty = filtered
+  // 🔥 FIX: Force numbers and ensure filtered is an array
+  const safeFiltered = Array.isArray(filtered) ? filtered : [];
+  
+  const totalQty = safeFiltered
     .filter((i) => i.status === "Confirmed")
-    .reduce((s, i) => s + i.qty, 0);
-  const totalCost = filtered
+    .reduce((s, i) => s + Number(i.qty || 0), 0);
+    
+  const totalCost = safeFiltered
     .filter((i) => i.status === "Confirmed")
-    .reduce((s, i) => s + i.total, 0);
+    .reduce((s, i) => s + Number(i.total || 0), 0);
+    
   const avgRate = totalQty > 0 ? (totalCost / totalQty).toFixed(2) : "0.00";
 
   return (
@@ -100,16 +102,17 @@ export default function Imports({
           },
           {
             label: "Avg Rate",
-            value: "₹" + avgRate.toFixed(2) + "/L",
+            // 🔥 FIX: avgRate is ALREADY a string from .toFixed(2) above!
+            value: "₹" + avgRate + "/L", 
             icon: "📊",
           },
-          { label: "Imports", value: filtered.length, icon: "📦" },
+          { label: "Imports", value: safeFiltered.length, icon: "📦" },
         ]}
       />
-      {filtered.length === 0 ? (
+      {safeFiltered.length === 0 ? (
         <Empty msg="No imports match filters" />
       ) : (
-        filtered.map((imp) => (
+        safeFiltered.map((imp) => (
           <Card key={imp.id}>
             <div
               style={{
@@ -171,7 +174,7 @@ export default function Imports({
         >
           Brands
         </div>
-        {brands.map((b) => (
+        {(brands || []).map((b) => (
           <div
             key={b.id}
             style={{
