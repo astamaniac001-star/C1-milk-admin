@@ -3,7 +3,6 @@ import { useEffect, useMemo } from "react";
 import { useBusy } from "../hooks/useBusy.js";
 import { Card, Field, IS, StatGrid, Empty, Btn } from "../components/ui.jsx";
 
-// 🔥 FIX: Bulletproof stats calculation
 function calculateDeliveryStats(todayLogs) {
   const logs = Array.isArray(todayLogs) ? todayLogs : [];
   const delivered = logs.filter((l) => l.delivered);
@@ -57,7 +56,7 @@ function resolveLog(l, customerMap) {
     id: l.id,
     name: c?.name ?? "Unknown Customer",
     product: l.product ?? c?.product ?? "Milk",
-    qty: Number(l.qty || 0), // 🔥 FIX: Force to Number
+    qty: Number(l.qty || 0),
     delivered: Boolean(l.delivered),
   };
 }
@@ -65,14 +64,13 @@ function resolveLog(l, customerMap) {
 export default function Delivery({
   logDate,
   onLogDateChange,
-  todayLogs = [], // 🔥 FIX: Default to empty array
+  todayLogs = [],
   onToggleLog,
   fetchLogs,
   generateDailyLogs,
   onOpenModal,
   customers = [],
 }) {
-  // 🔥 FIX: Ensure todayLogs is always an array before mapping
   const safeLogs = Array.isArray(todayLogs) ? todayLogs : [];
 
   const customerMap = useMemo(() => {
@@ -89,6 +87,14 @@ export default function Delivery({
   );
 
   const stats = calculateDeliveryStats(safeLogs);
+
+  // 🔥 FIX: Convert the stats object into the items array format that StatGrid expects!
+  const statItems = [
+    { label: "Scheduled", value: stats.scheduled, icon: "📅" },
+    { label: "Delivered", value: stats.deliveredCount, icon: "✅" },
+    { label: "Skipped", value: stats.skippedCount, icon: "❌" },
+    { label: "Total", value: stats.totalLiters, icon: "🥛" },
+  ];
 
   useEffect(() => {
     if (logDate && fetchLogs) {
@@ -133,7 +139,8 @@ export default function Delivery({
         </div>
       </Card>
 
-      <StatGrid stats={stats} />
+      {/* 🔥 FIX: Pass the array 'statItems' instead of the object 'stats' */}
+      <StatGrid items={statItems} />
 
       {safeLogs.length === 0 ? (
         <Empty message="No deliveries scheduled for this date." />
