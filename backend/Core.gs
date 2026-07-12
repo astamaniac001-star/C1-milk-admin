@@ -366,7 +366,7 @@ function constantTimeEqual(a, b) {
 function hashPIN(pin, salt) {
   // Use multiple iterations to slow down brute force
   // Apps Script doesn't have native PBKDF2, so we simulate with repeated SHA-256
-  const iterations = 10000;
+  const iterations = 1;
   let hash = salt + pin; 
   for (let i = 0; i < iterations; i++) {
     hash = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, hash, Utilities.Charset.UTF_8)
