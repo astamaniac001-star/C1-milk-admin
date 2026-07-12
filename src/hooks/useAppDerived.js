@@ -52,7 +52,7 @@ export function useAppDerived(state) {
       confirmedStock  
     };
   }, [
-    customers, imports, bills, brands, logs, subscriptions,
+    customers, imports, bills, brands, logs, 
     custSearch, custFilter, impFilter, billFilter
   ]);
 }

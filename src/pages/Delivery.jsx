@@ -71,7 +71,7 @@ export default function Delivery({
   onOpenModal,
   customers = [],
 }) {
-  const safeLogs = Array.isArray(todayLogs) ? todayLogs : [];
+  const safeLogs = useMemo(() => (Array.isArray(todayLogs) ? todayLogs : []), [todayLogs]);
 
   const customerMap = useMemo(() => {
     const map = {};

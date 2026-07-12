@@ -31,8 +31,9 @@ export default function Login({ onLogin, error, loading }) {
           <p>Enter your 4-digit PIN to continue.</p>
           
           <div className="field">
-            <label className="field-label">PIN</label>
+            <label className="field-label" htmlFor="pin-input">PIN</label>
             <input
+              id="pin-input"
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code" 

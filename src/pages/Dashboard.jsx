@@ -1,5 +1,5 @@
 import { Card, StatGrid, Btn, Section, Empty, Badge } from "../components/ui.jsx";
-import { UserPlus, Package, Receipt, Scale, PauseCircle, Tag, ArrowRight, Calendar, CheckCircle, XCircle, Droplet } from "lucide-react";
+import { UserPlus, Package, Receipt, Scale, PauseCircle, Tag, ArrowRight, CheckCircle, XCircle, Droplet } from "lucide-react";
 import { fmt } from "../lib/utils.js";
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

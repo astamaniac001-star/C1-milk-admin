@@ -13,7 +13,7 @@ const toArray = (val) => {
     try {
       const parsed = JSON.parse(val);
       return Array.isArray(parsed) ? parsed : [];
-    } catch (e) {
+    } catch  {
       if (val.includes(',')) {
         return val.split(',').map(s => s.trim()).filter(Boolean);
       }
